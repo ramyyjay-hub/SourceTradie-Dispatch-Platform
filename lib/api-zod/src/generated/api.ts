@@ -18,7 +18,7 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * @summary List job requests
+ * @summary List job requests (admin only)
  */
 export const ListJobsResponseItem = zod.object({
   "id": zod.number(),
@@ -62,48 +62,38 @@ export const CreateJobBody = zod.object({
 export const CreateJobResponse = zod.object({
   "id": zod.number(),
   "reference": zod.string(),
-  "description": zod.string(),
-  "trade": zod.string(),
-  "suburb": zod.string(),
-  "postcode": zod.string(),
-  "urgency": zod.string(),
-  "preferredTime": zod.string(),
   "status": zod.string(),
-  "customerName": zod.string().optional(),
-  "customerPhone": zod.string().nullish(),
-  "customerEmail": zod.string().nullish(),
   "createdAt": zod.string(),
-  "images": zod.array(zod.string()).optional()
+  "statusAccessToken": zod.string(),
+  "statusAccessUrl": zod.string()
 })
 
 
 /**
- * @summary Get a job request
+ * @summary Get public status for a job using access token
  */
 export const GetJobParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const getJobQueryTokenMin = 16;
+
+
+
+export const GetJobQueryParams = zod.object({
+  "token": zod.coerce.string().min(getJobQueryTokenMin)
+})
+
 export const GetJobResponse = zod.object({
-  "id": zod.number(),
   "reference": zod.string(),
-  "description": zod.string(),
-  "trade": zod.string(),
-  "suburb": zod.string(),
-  "postcode": zod.string(),
-  "urgency": zod.string(),
-  "preferredTime": zod.string(),
   "status": zod.string(),
-  "customerName": zod.string().optional(),
-  "customerPhone": zod.string().nullish(),
-  "customerEmail": zod.string().nullish(),
   "createdAt": zod.string(),
-  "images": zod.array(zod.string()).optional()
+  "updatedAt": zod.string()
 })
 
 
 /**
- * @summary Update a job status
+ * @summary Update a job status (admin only)
  */
 export const UpdateJobParams = zod.object({
   "id": zod.coerce.number()
@@ -132,7 +122,7 @@ export const UpdateJobResponse = zod.object({
 
 
 /**
- * @summary List trade partners
+ * @summary List trade partners (admin gets all; partner gets self)
  */
 export const ListPartnersResponseItem = zod.object({
   "id": zod.number(),

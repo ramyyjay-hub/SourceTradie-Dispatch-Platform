@@ -22,14 +22,17 @@ import type {
 import type {
   AdminSummary,
   AvailabilityInput,
+  CreateJobResponse,
   Dispatch,
   DispatchDecisionInput,
+  GetJobParams,
   HealthStatus,
   Job,
   JobInput,
   JobUpdate,
   Partner,
-  PartnerInput
+  PartnerInput,
+  PublicJobStatus
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -146,7 +149,7 @@ export const getListJobsUrl = () => {
 }
 
 /**
- * @summary List job requests
+ * @summary List job requests (admin only)
  */
 export const listJobs = async ( options?: Parameters<typeof customFetch>[1]): Promise<Job[]> => {
 
@@ -170,7 +173,7 @@ export const getListJobsQueryKey = () => {
     }
 
 
-export const getListJobsQueryOptions = <TData = Awaited<ReturnType<typeof listJobs>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListJobsQueryOptions = <TData = Awaited<ReturnType<typeof listJobs>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -189,14 +192,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type ListJobsQueryResult = NonNullable<Awaited<ReturnType<typeof listJobs>>>
-export type ListJobsQueryError = ErrorType<unknown>
+export type ListJobsQueryError = ErrorType<void>
 
 
 /**
- * @summary List job requests
+ * @summary List job requests (admin only)
  */
 
-export function useListJobs<TData = Awaited<ReturnType<typeof listJobs>>, TError = ErrorType<unknown>>(
+export function useListJobs<TData = Awaited<ReturnType<typeof listJobs>>, TError = ErrorType<void>>(
   options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
@@ -225,9 +228,9 @@ export const getCreateJobUrl = () => {
 /**
  * @summary Create a customer job request
  */
-export const createJob = async (jobInput: JobInput, options?: Parameters<typeof customFetch>[1]): Promise<Job> => {
+export const createJob = async (jobInput: JobInput, options?: Parameters<typeof customFetch>[1]): Promise<CreateJobResponse> => {
 
-  return customFetch<Job>(getCreateJobUrl(),
+  return customFetch<CreateJobResponse>(getCreateJobUrl(),
   {
     ...options,
     method: 'POST',
@@ -285,20 +288,29 @@ export const useCreateJob = <TError = ErrorType<unknown>,
       return useMutation(getCreateJobMutationOptions(options));
     }
 
-export const getGetJobUrl = (id: number,) => {
+export const getGetJobUrl = (id: number,
+    params: GetJobParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/jobs/${id}`
+  return stringifiedParams.length > 0 ? `/api/jobs/${id}?${stringifiedParams}` : `/api/jobs/${id}`
 }
 
 /**
- * @summary Get a job request
+ * @summary Get public status for a job using access token
  */
-export const getJob = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<Job> => {
+export const getJob = async (id: number,
+    params: GetJobParams, options?: Parameters<typeof customFetch>[1]): Promise<PublicJobStatus> => {
 
-  return customFetch<Job>(getGetJobUrl(id),
+  return customFetch<PublicJobStatus>(getGetJobUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -311,23 +323,25 @@ export const getJob = async (id: number, options?: Parameters<typeof customFetch
 
 
 
-export const getGetJobQueryKey = (id: number,) => {
+export const getGetJobQueryKey = (id: number,
+    params?: GetJobParams,) => {
     return [
-    `/api/jobs/${id}`
+    `/api/jobs/${id}`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetJobQueryOptions = <TData = Awaited<ReturnType<typeof getJob>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetJobQueryOptions = <TData = Awaited<ReturnType<typeof getJob>>, TError = ErrorType<void>>(id: number,
+    params: GetJobParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetJobQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getGetJobQueryKey(id,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getJob>>> = ({ signal }) => getJob(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getJob>>> = ({ signal }) => getJob(id,params, { signal, ...requestOptions });
 
 
 
@@ -341,15 +355,16 @@ export type GetJobQueryError = ErrorType<void>
 
 
 /**
- * @summary Get a job request
+ * @summary Get public status for a job using access token
  */
 
 export function useGetJob<TData = Awaited<ReturnType<typeof getJob>>, TError = ErrorType<void>>(
- id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ id: number,
+    params: GetJobParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetJobQueryOptions(id,options)
+  const queryOptions = getGetJobQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -371,7 +386,7 @@ export const getUpdateJobUrl = (id: number,) => {
 }
 
 /**
- * @summary Update a job status
+ * @summary Update a job status (admin only)
  */
 export const updateJob = async (id: number,
     jobUpdate: JobUpdate, options?: Parameters<typeof customFetch>[1]): Promise<Job> => {
@@ -389,7 +404,7 @@ export const updateJob = async (id: number,
 
 
 
-export const getUpdateJobMutationOptions = <TError = ErrorType<unknown>,
+export const getUpdateJobMutationOptions = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateJob>>, TError,{id: number;data: BodyType<JobUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateJob>>, TError,{id: number;data: BodyType<JobUpdate>}, TContext> => {
 
@@ -418,12 +433,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type UpdateJobMutationResult = NonNullable<Awaited<ReturnType<typeof updateJob>>>
     export type UpdateJobMutationBody = BodyType<JobUpdate>
-    export type UpdateJobMutationError = ErrorType<unknown>
+    export type UpdateJobMutationError = ErrorType<void>
 
     /**
- * @summary Update a job status
+ * @summary Update a job status (admin only)
  */
-export const useUpdateJob = <TError = ErrorType<unknown>,
+export const useUpdateJob = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateJob>>, TError,{id: number;data: BodyType<JobUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof updateJob>>,
@@ -443,7 +458,7 @@ export const getListPartnersUrl = () => {
 }
 
 /**
- * @summary List trade partners
+ * @summary List trade partners (admin gets all; partner gets self)
  */
 export const listPartners = async ( options?: Parameters<typeof customFetch>[1]): Promise<Partner[]> => {
 
@@ -467,7 +482,7 @@ export const getListPartnersQueryKey = () => {
     }
 
 
-export const getListPartnersQueryOptions = <TData = Awaited<ReturnType<typeof listPartners>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPartners>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListPartnersQueryOptions = <TData = Awaited<ReturnType<typeof listPartners>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPartners>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -486,14 +501,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type ListPartnersQueryResult = NonNullable<Awaited<ReturnType<typeof listPartners>>>
-export type ListPartnersQueryError = ErrorType<unknown>
+export type ListPartnersQueryError = ErrorType<void>
 
 
 /**
- * @summary List trade partners
+ * @summary List trade partners (admin gets all; partner gets self)
  */
 
-export function useListPartners<TData = Awaited<ReturnType<typeof listPartners>>, TError = ErrorType<unknown>>(
+export function useListPartners<TData = Awaited<ReturnType<typeof listPartners>>, TError = ErrorType<void>>(
   options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPartners>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
@@ -609,7 +624,7 @@ export const updatePartnerAvailability = async (id: number,
 
 
 
-export const getUpdatePartnerAvailabilityMutationOptions = <TError = ErrorType<unknown>,
+export const getUpdatePartnerAvailabilityMutationOptions = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePartnerAvailability>>, TError,{id: number;data: BodyType<AvailabilityInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updatePartnerAvailability>>, TError,{id: number;data: BodyType<AvailabilityInput>}, TContext> => {
 
@@ -638,12 +653,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type UpdatePartnerAvailabilityMutationResult = NonNullable<Awaited<ReturnType<typeof updatePartnerAvailability>>>
     export type UpdatePartnerAvailabilityMutationBody = BodyType<AvailabilityInput>
-    export type UpdatePartnerAvailabilityMutationError = ErrorType<unknown>
+    export type UpdatePartnerAvailabilityMutationError = ErrorType<void>
 
     /**
  * @summary Update trade partner availability
  */
-export const useUpdatePartnerAvailability = <TError = ErrorType<unknown>,
+export const useUpdatePartnerAvailability = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePartnerAvailability>>, TError,{id: number;data: BodyType<AvailabilityInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof updatePartnerAvailability>>,
@@ -681,7 +696,7 @@ export const decideDispatch = async (id: number,
 
 
 
-export const getDecideDispatchMutationOptions = <TError = ErrorType<unknown>,
+export const getDecideDispatchMutationOptions = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideDispatch>>, TError,{id: number;data: BodyType<DispatchDecisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof decideDispatch>>, TError,{id: number;data: BodyType<DispatchDecisionInput>}, TContext> => {
 
@@ -710,12 +725,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type DecideDispatchMutationResult = NonNullable<Awaited<ReturnType<typeof decideDispatch>>>
     export type DecideDispatchMutationBody = BodyType<DispatchDecisionInput>
-    export type DecideDispatchMutationError = ErrorType<unknown>
+    export type DecideDispatchMutationError = ErrorType<void>
 
     /**
  * @summary Accept or decline a dispatched opportunity
  */
-export const useDecideDispatch = <TError = ErrorType<unknown>,
+export const useDecideDispatch = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideDispatch>>, TError,{id: number;data: BodyType<DispatchDecisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof decideDispatch>>,
@@ -759,7 +774,7 @@ export const getGetAdminSummaryQueryKey = () => {
     }
 
 
-export const getGetAdminSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getAdminSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetAdminSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getAdminSummary>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -778,14 +793,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetAdminSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminSummary>>>
-export type GetAdminSummaryQueryError = ErrorType<unknown>
+export type GetAdminSummaryQueryError = ErrorType<void>
 
 
 /**
  * @summary Get admin dashboard summary
  */
 
-export function useGetAdminSummary<TData = Awaited<ReturnType<typeof getAdminSummary>>, TError = ErrorType<unknown>>(
+export function useGetAdminSummary<TData = Awaited<ReturnType<typeof getAdminSummary>>, TError = ErrorType<void>>(
   options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {

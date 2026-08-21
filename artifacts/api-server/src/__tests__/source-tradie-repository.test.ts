@@ -19,14 +19,22 @@ import {
 function buildRepository() {
   const client = new PGlite();
 
-  const migrationPath = path.resolve(
-    import.meta.dirname,
-    "../../../../lib/db/migrations/0000_phase1_productionisation.sql",
-  );
+  const migrationPaths = [
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0000_phase1_productionisation.sql",
+    ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0001_phase2_auth_rbac.sql",
+    ),
+  ];
 
-  const migrationSql = fs.readFileSync(migrationPath, "utf8");
-
-  return client.exec(migrationSql).then(() => {
+  return Promise.all(
+    migrationPaths.map((migrationPath) =>
+      client.exec(fs.readFileSync(migrationPath, "utf8")),
+    ),
+  ).then(() => {
     const testDb = drizzle(client);
     return {
       repository: new SourceTradieRepository(testDb as any),

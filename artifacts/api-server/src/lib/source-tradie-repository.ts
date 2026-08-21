@@ -1,4 +1,6 @@
+import crypto from "node:crypto";
 import {
+  appUsersTable,
   dispatchOffersTable,
   dispatchStateEnum,
   jobImagesTable,
@@ -29,6 +31,17 @@ export type JobApi = {
   customerEmail: string | null;
   createdAt: string;
   images: string[];
+};
+
+export type CreatedJobApi = JobApi & {
+  statusAccessToken: string;
+};
+
+export type PublicJobStatusApi = {
+  reference: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type PartnerApi = {
@@ -64,6 +77,13 @@ export type AdminSummaryApi = {
   acceptedJobs: number;
   declinedJobs: number;
   completedJobs: number;
+};
+
+export type PrincipalRecord = {
+  authUserId: string;
+  role: "partner" | "admin";
+  isActive: boolean;
+  partnerId: number | null;
 };
 
 export type JobStatus = (typeof jobStatusEnum.enumValues)[number];
@@ -105,6 +125,10 @@ function isJobStatus(value: string): value is JobStatus {
 
 function isDispatchState(value: string): value is DispatchState {
   return (dispatchStateEnum.enumValues as string[]).includes(value);
+}
+
+function createStatusToken(): string {
+  return crypto.randomBytes(32).toString("hex");
 }
 
 export function canTransitionJobStatus(
@@ -180,6 +204,30 @@ export class SourceTradieRepository {
     };
   }
 
+  async findPrincipalByAuthUserId(authUserId: string): Promise<PrincipalRecord | null> {
+    const rows = await this.database
+      .select({
+        authUserId: appUsersTable.authUserId,
+        role: appUsersTable.role,
+        isActive: appUsersTable.isActive,
+        partnerId: partnersTable.id,
+      })
+      .from(appUsersTable)
+      .leftJoin(partnersTable, eq(partnersTable.authUserId, appUsersTable.authUserId))
+      .where(eq(appUsersTable.authUserId, authUserId))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) return null;
+
+    return {
+      authUserId: row.authUserId,
+      role: row.role,
+      isActive: row.isActive,
+      partnerId: row.partnerId,
+    };
+  }
+
   async listJobs(): Promise<JobApi[]> {
     const rows = await this.database
       .select()
@@ -202,17 +250,19 @@ export class SourceTradieRepository {
     customerPhone?: string;
     customerEmail?: string;
     images?: string[];
-  }): Promise<JobApi> {
+  }): Promise<CreatedJobApi> {
     return this.database.transaction(async (tx) => {
       const now = new Date();
       const placeholderReference = `ST-PENDING-${now.getTime()}-${Math.floor(
         Math.random() * 10000,
       )}`;
+      const statusAccessToken = createStatusToken();
 
       const insertedRows = await tx
         .insert(jobsTable)
         .values({
           reference: placeholderReference,
+          publicStatusToken: statusAccessToken,
           description: input.description,
           trade: input.trade,
           suburb: input.suburb,
@@ -258,7 +308,10 @@ export class SourceTradieRepository {
         createdAt: now,
       });
 
-      return this.toJobApi(updated, imageNames);
+      return {
+        ...this.toJobApi(updated, imageNames),
+        statusAccessToken,
+      };
     });
   }
 
@@ -274,6 +327,29 @@ export class SourceTradieRepository {
 
     const imagesByJobId = await this.getJobImages([id]);
     return this.toJobApi(row, imagesByJobId.get(id) ?? []);
+  }
+
+  async getPublicJobStatusByToken(jobId: number, token: string): Promise<PublicJobStatusApi | null> {
+    const rows = await this.database
+      .select({
+        reference: jobsTable.reference,
+        status: jobsTable.status,
+        createdAt: jobsTable.createdAt,
+        updatedAt: jobsTable.updatedAt,
+      })
+      .from(jobsTable)
+      .where(and(eq(jobsTable.id, jobId), eq(jobsTable.publicStatusToken, token)))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) return null;
+
+    return {
+      reference: row.reference,
+      status: row.status,
+      createdAt: toIso(row.createdAt),
+      updatedAt: toIso(row.updatedAt),
+    };
   }
 
   async updateJobStatus(
@@ -381,6 +457,11 @@ export class SourceTradieRepository {
       services: servicesByPartner.get(partner.id) ?? [],
       emergencyJobs: partner.emergencyJobs,
     }));
+  }
+
+  async listPartnersForPartner(partnerId: number): Promise<PartnerApi[]> {
+    const all = await this.listPartners();
+    return all.filter((partner) => partner.id === partnerId);
   }
 
   async createPartner(input: {
@@ -496,6 +577,16 @@ export class SourceTradieRepository {
       services: services.map((service) => service.service),
       emergencyJobs: partner.emergencyJobs,
     };
+  }
+
+  async findDispatchById(id: number): Promise<{ id: number; partnerId: number } | null> {
+    const rows = await this.database
+      .select({ id: dispatchOffersTable.id, partnerId: dispatchOffersTable.partnerId })
+      .from(dispatchOffersTable)
+      .where(eq(dispatchOffersTable.id, id))
+      .limit(1);
+
+    return rows[0] ?? null;
   }
 
   async decideDispatch(

@@ -28,6 +28,22 @@ export interface Job {
   images?: string[];
 }
 
+export interface CreateJobResponse {
+  id: number;
+  reference: string;
+  status: string;
+  createdAt: string;
+  statusAccessToken: string;
+  statusAccessUrl: string;
+}
+
+export interface PublicJobStatus {
+  reference: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface JobInput {
   /** @minLength 4 */
   description: string;
@@ -104,4 +120,13 @@ export interface AdminSummary {
   declinedJobs: number;
   completedJobs: number;
 }
+
+export type JobStatusTokenParameter = string;
+
+export type GetJobParams = {
+/**
+ * @minLength 16
+ */
+token: JobStatusTokenParameter;
+};
 

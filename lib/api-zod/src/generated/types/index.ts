@@ -8,11 +8,15 @@
 
 export * from './adminSummary';
 export * from './availabilityInput';
+export * from './createJobResponse';
 export * from './dispatch';
 export * from './dispatchDecisionInput';
+export * from './getJobParams';
 export * from './healthStatus';
 export * from './job';
 export * from './jobInput';
+export * from './jobStatusTokenParameter';
 export * from './jobUpdate';
 export * from './partner';
 export * from './partnerInput';
+export * from './publicJobStatus';

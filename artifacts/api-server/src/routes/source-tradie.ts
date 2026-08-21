@@ -10,33 +10,63 @@ import {
   UpdatePartnerAvailabilityBody,
   UpdatePartnerAvailabilityParams,
 } from "@workspace/api-zod";
-import { db } from "@workspace/db";
+import { db, type db as WorkspaceDb } from "@workspace/db";
 import { SourceTradieRepository } from "../lib/source-tradie-repository";
+import { requireAuth } from "../middlewares/auth";
+import {
+  requireAdmin,
+  requirePartnerOrAdmin,
+} from "../middlewares/authorize";
 
-const router: IRouter = Router();
-const repository = new SourceTradieRepository(db);
+type DbLike = typeof WorkspaceDb;
 
-router.get("/jobs", async (_req, res) => {
-  const jobs = await repository.listJobs();
-  res.json(jobs);
-});
+export function createSourceTradieRouter(database: DbLike): IRouter {
+  const router: IRouter = Router();
+  const repository = new SourceTradieRepository(database);
+  const authRequired = requireAuth(repository);
 
 router.post("/jobs", async (req, res) => {
   const parsed = CreateJobBody.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Please complete the required job details." });
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Please complete the required job details." });
+  }
 
   const job = await repository.createJob(parsed.data);
-  return res.status(201).json(job);
+  return res.status(201).json({
+    id: job.id,
+    reference: job.reference,
+    status: job.status,
+    createdAt: job.createdAt,
+    statusAccessToken: job.statusAccessToken,
+    statusAccessUrl: `/request/${job.id}?token=${job.statusAccessToken}`,
+  });
 });
 
 router.get("/jobs/:id", async (req, res) => {
   const parsed = GetJobParams.safeParse(req.params);
-  const job = parsed.success ? await repository.getJob(parsed.data.id) : null;
-  if (!job) return res.status(404).json({ error: "Job not found." });
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid job identifier." });
+  }
+
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  if (!token) {
+    return res.status(401).json({ error: "A valid status token is required." });
+  }
+
+  const job = await repository.getPublicJobStatusByToken(parsed.data.id, token);
+  if (!job) {
+    return res.status(404).json({ error: "Job not found." });
+  }
+
   return res.json(job);
 });
 
-router.patch("/jobs/:id", async (req, res) => {
+router.get("/jobs", authRequired, requireAdmin, async (_req, res) => {
+  const jobs = await repository.listJobs();
+  res.json(jobs);
+});
+
+router.patch("/jobs/:id", authRequired, requireAdmin, async (req, res) => {
   const params = UpdateJobParams.safeParse(req.params);
   const body = UpdateJobBody.safeParse(req.body);
 
@@ -63,72 +93,118 @@ router.patch("/jobs/:id", async (req, res) => {
   return res.json(result.job);
 });
 
-router.get("/partners", async (_req, res) => {
-  const partners = await repository.listPartners();
-  res.json(partners);
-});
-
 router.post("/partners", async (req, res) => {
   const parsed = CreatePartnerBody.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Please complete the required partner details." });
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Please complete the required partner details." });
+  }
 
   const partner = await repository.createPartner(parsed.data);
   return res.status(201).json(partner);
 });
 
-router.patch("/partners/:id/availability", async (req, res) => {
-  const params = UpdatePartnerAvailabilityParams.safeParse(req.params);
-  const body = UpdatePartnerAvailabilityBody.safeParse(req.body);
-
-  if (!params.success || !body.success) {
-    return res.status(400).json({ error: "Unable to update availability." });
+router.get("/partners", authRequired, requirePartnerOrAdmin, async (req, res) => {
+  const principal = req.auth!.principal;
+  if (principal.role === "admin") {
+    const partners = await repository.listPartners();
+    return res.json(partners);
   }
 
-  const partner = await repository.updatePartnerAvailability(
-    params.data.id,
-    body.data.availability,
-  );
-
-  if (!partner) {
-    return res.status(404).json({ error: "Partner not found." });
+  if (!principal.partnerId) {
+    return res.status(403).json({ error: "No partner profile is linked to this account." });
   }
 
-  return res.json(partner);
+  const partners = await repository.listPartnersForPartner(principal.partnerId);
+  return res.json(partners);
 });
 
-router.patch("/dispatches/:id/decision", async (req, res) => {
-  const params = DecideDispatchParams.safeParse(req.params);
-  const body = DecideDispatchBody.safeParse(req.body);
+router.patch(
+  "/partners/:id/availability",
+  authRequired,
+  requirePartnerOrAdmin,
+  async (req, res) => {
+    const params = UpdatePartnerAvailabilityParams.safeParse(req.params);
+    const body = UpdatePartnerAvailabilityBody.safeParse(req.body);
 
-  if (!params.success || !body.success) {
-    return res.status(400).json({ error: "Unable to update opportunity." });
-  }
+    if (!params.success || !body.success) {
+      return res.status(400).json({ error: "Unable to update availability." });
+    }
 
-  const result = await repository.decideDispatch(
-    params.data.id,
-    body.data.decision,
-  );
+    const principal = req.auth!.principal;
+    if (principal.role === "partner" && principal.partnerId !== params.data.id) {
+      return res.status(403).json({ error: "You can only update your own partner profile." });
+    }
 
-  if (result.kind === "not_found") {
-    return res.status(404).json({ error: "Dispatch not found." });
-  }
+    const partner = await repository.updatePartnerAvailability(
+      params.data.id,
+      body.data.availability,
+    );
 
-  if (result.kind === "invalid_status") {
-    return res.status(400).json({ error: "Invalid dispatch decision value." });
-  }
+    if (!partner) {
+      return res.status(404).json({ error: "Partner not found." });
+    }
 
-  if (result.kind === "invalid_transition") {
-    return res.status(409).json({
-      error: `Invalid dispatch transition from ${result.from} to ${result.to}.`,
-    });
-  }
+    return res.json(partner);
+  },
+);
 
-  return res.json(result.dispatch);
-});
+router.patch(
+  "/dispatches/:id/decision",
+  authRequired,
+  requirePartnerOrAdmin,
+  async (req, res) => {
+    const params = DecideDispatchParams.safeParse(req.params);
+    const body = DecideDispatchBody.safeParse(req.body);
 
-router.get("/admin/summary", async (_req, res) => {
+    if (!params.success || !body.success) {
+      return res.status(400).json({ error: "Unable to update opportunity." });
+    }
+
+    const principal = req.auth!.principal;
+    if (principal.role === "partner") {
+      if (!principal.partnerId) {
+        return res.status(403).json({ error: "No partner profile is linked to this account." });
+      }
+
+      const dispatch = await repository.findDispatchById(params.data.id);
+      if (!dispatch) {
+        return res.status(404).json({ error: "Dispatch not found." });
+      }
+
+      if (dispatch.partnerId !== principal.partnerId) {
+        return res.status(403).json({ error: "You can only act on your own dispatch offers." });
+      }
+    }
+
+    const result = await repository.decideDispatch(
+      params.data.id,
+      body.data.decision,
+    );
+
+    if (result.kind === "not_found") {
+      return res.status(404).json({ error: "Dispatch not found." });
+    }
+
+    if (result.kind === "invalid_status") {
+      return res.status(400).json({ error: "Invalid dispatch decision value." });
+    }
+
+    if (result.kind === "invalid_transition") {
+      return res.status(409).json({
+        error: `Invalid dispatch transition from ${result.from} to ${result.to}.`,
+      });
+    }
+
+    return res.json(result.dispatch);
+  },
+);
+
+router.get("/admin/summary", authRequired, requireAdmin, async (_req, res) => {
   const summary = await repository.getAdminSummary();
   res.json(summary);
 });
 
-export default router;
+  return router;
+}
+
+export default createSourceTradieRouter(db);

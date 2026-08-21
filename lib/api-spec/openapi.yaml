@@ -30,11 +30,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
   /jobs:
     get:
       operationId: listJobs
       tags: [jobs]
-      summary: List job requests
+      summary: List job requests (admin only)
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: Job requests
@@ -44,6 +47,10 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Job"
+        "401":
+          description: Authentication required
+        "403":
+          description: Forbidden
     post:
       operationId: createJob
       tags: [jobs]
@@ -60,27 +67,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Job"
+                $ref: "#/components/schemas/CreateJobResponse"
+
   /jobs/{id}:
     get:
       operationId: getJob
       tags: [jobs]
-      summary: Get a job request
+      summary: Get public status for a job using access token
       parameters:
         - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/JobStatusToken"
       responses:
         "200":
-          description: Job request
+          description: Public job status
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Job"
+                $ref: "#/components/schemas/PublicJobStatus"
+        "401":
+          description: Missing or invalid token
         "404":
           description: Job not found
     patch:
       operationId: updateJob
       tags: [jobs]
-      summary: Update a job status
+      summary: Update a job status (admin only)
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -96,11 +109,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Job"
+        "401":
+          description: Authentication required
+        "403":
+          description: Forbidden
+
   /partners:
     get:
       operationId: listPartners
       tags: [partners]
-      summary: List trade partners
+      summary: List trade partners (admin gets all; partner gets self)
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: Trade partners
@@ -110,6 +130,10 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Partner"
+        "401":
+          description: Authentication required
+        "403":
+          description: Forbidden
     post:
       operationId: createPartner
       tags: [partners]
@@ -127,11 +151,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Partner"
+
   /partners/{id}/availability:
     patch:
       operationId: updatePartnerAvailability
       tags: [partners]
       summary: Update trade partner availability
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -147,11 +174,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Partner"
+        "401":
+          description: Authentication required
+        "403":
+          description: Forbidden
+
   /dispatches/{id}/decision:
     patch:
       operationId: decideDispatch
       tags: [jobs]
       summary: Accept or decline a dispatched opportunity
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -167,11 +201,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Dispatch"
+        "401":
+          description: Authentication required
+        "403":
+          description: Forbidden
+
   /admin/summary:
     get:
       operationId: getAdminSummary
       tags: [admin]
       summary: Get admin dashboard summary
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: Admin dashboard summary
@@ -179,7 +220,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminSummary"
+        "401":
+          description: Authentication required
+        "403":
+          description: Forbidden
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   parameters:
     Id:
       name: id
@@ -187,6 +239,14 @@ components:
       required: true
       schema:
         type: number
+    JobStatusToken:
+      name: token
+      in: query
+      required: true
+      schema:
+        type: string
+        minLength: 16
+
   schemas:
     HealthStatus:
       type: object
@@ -195,6 +255,7 @@ components:
           type: string
       required:
         - status
+
     Job:
       type: object
       required: [id, reference, description, trade, suburb, postcode, urgency, preferredTime, status, createdAt]
@@ -215,6 +276,27 @@ components:
         images:
           type: array
           items: { type: string }
+
+    CreateJobResponse:
+      type: object
+      required: [id, reference, status, createdAt, statusAccessToken, statusAccessUrl]
+      properties:
+        id: { type: number }
+        reference: { type: string }
+        status: { type: string }
+        createdAt: { type: string }
+        statusAccessToken: { type: string }
+        statusAccessUrl: { type: string }
+
+    PublicJobStatus:
+      type: object
+      required: [reference, status, createdAt, updatedAt]
+      properties:
+        reference: { type: string }
+        status: { type: string }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
     JobInput:
       type: object
       required: [description, trade, suburb, postcode, urgency, preferredTime, customerName]
@@ -231,10 +313,12 @@ components:
         images:
           type: array
           items: { type: string }
+
     JobUpdate:
       type: object
       properties:
         status: { type: string }
+
     Partner:
       type: object
       required: [id, businessName, contactName, trade, suburbs, availability, status]
@@ -254,6 +338,7 @@ components:
           type: array
           items: { type: string }
         emergencyJobs: { type: boolean }
+
     PartnerInput:
       type: object
       required: [businessName, contactName, trade, mobile, email, suburbs, radiusKm]
@@ -273,11 +358,13 @@ components:
           type: array
           items: { type: string }
         emergencyJobs: { type: boolean }
+
     AvailabilityInput:
       type: object
       required: [availability]
       properties:
         availability: { type: boolean }
+
     Dispatch:
       type: object
       required: [id, jobId, businessId, decision]
@@ -288,11 +375,13 @@ components:
         decision: { type: string }
         offeredAt: { type: string }
         respondedAt: { type: ["string", "null"] }
+
     DispatchDecisionInput:
       type: object
       required: [decision]
       properties:
         decision: { type: string }
+
     AdminSummary:
       type: object
       required: [newRequests, awaitingDispatch, tradieApplications, approvedTradies, availableTradies, sentOpportunities, acceptedJobs, declinedJobs, completedJobs]
@@ -306,4 +395,3 @@ components:
         acceptedJobs: { type: number }
         declinedJobs: { type: number }
         completedJobs: { type: number }
-

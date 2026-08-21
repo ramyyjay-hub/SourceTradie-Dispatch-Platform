@@ -7,6 +7,7 @@ import {
 	text,
 	timestamp,
 	uniqueIndex,
+	uuid,
 	varchar,
 } from "drizzle-orm/pg-core";
 
@@ -36,11 +37,35 @@ export const dispatchStateEnum = pgEnum("dispatch_state", [
 	"cancelled",
 ]);
 
+export const appRoleEnum = pgEnum("app_role", ["partner", "admin"]);
+
+export const appUsersTable = pgTable(
+	"app_users",
+	{
+		id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+		authUserId: uuid("auth_user_id").notNull(),
+		role: appRoleEnum("role").notNull(),
+		isActive: boolean("is_active").notNull().default(true),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(table) => [
+		uniqueIndex("app_users_auth_user_id_uidx").on(table.authUserId),
+		index("app_users_role_idx").on(table.role),
+		index("app_users_active_idx").on(table.isActive),
+	],
+);
+
 export const jobsTable = pgTable(
 	"jobs",
 	{
 		id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
 		reference: varchar("reference", { length: 32 }).notNull(),
+		publicStatusToken: varchar("public_status_token", { length: 64 }).notNull(),
 		description: text("description").notNull(),
 		trade: text("trade").notNull(),
 		suburb: text("suburb").notNull(),
@@ -60,6 +85,7 @@ export const jobsTable = pgTable(
 	},
 	(table) => [
 		uniqueIndex("jobs_reference_uidx").on(table.reference),
+		uniqueIndex("jobs_public_status_token_uidx").on(table.publicStatusToken),
 		index("jobs_status_idx").on(table.status),
 		index("jobs_created_at_idx").on(table.createdAt),
 	],
@@ -107,6 +133,7 @@ export const partnersTable = pgTable(
 	"partners",
 	{
 		id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+		authUserId: uuid("auth_user_id"),
 		businessName: text("business_name").notNull(),
 		contactName: text("contact_name").notNull(),
 		abn: text("abn"),
@@ -126,6 +153,7 @@ export const partnersTable = pgTable(
 			.notNull(),
 	},
 	(table) => [
+		uniqueIndex("partners_auth_user_id_uidx").on(table.authUserId),
 		index("partners_status_idx").on(table.status),
 		index("partners_availability_idx").on(table.availability),
 	],
@@ -205,7 +233,9 @@ export const dispatchOffersTable = pgTable(
 export type JobStatus = (typeof jobStatusEnum.enumValues)[number];
 export type PartnerStatus = (typeof partnerStatusEnum.enumValues)[number];
 export type DispatchState = (typeof dispatchStateEnum.enumValues)[number];
+export type AppRole = (typeof appRoleEnum.enumValues)[number];
 
 export type JobRecord = typeof jobsTable.$inferSelect;
 export type PartnerRecord = typeof partnersTable.$inferSelect;
 export type DispatchOfferRecord = typeof dispatchOffersTable.$inferSelect;
+export type AppUserRecord = typeof appUsersTable.$inferSelect;
