@@ -4,12 +4,22 @@ SourceTradie helps Melbourne homeowners describe a problem, qualify the request 
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm install` — install workspace dependencies
+- `pnpm --filter @workspace/db run migrate` — apply checked-in SQL migrations
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port `8080`)
+- `pnpm --filter @workspace/source-tradie run dev` — run the web app (port `24974`)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
+- `pnpm --filter @workspace/api-server run test` — run API repository and transition tests
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/db run push` — direct dev-only schema sync without migration files
+
+Required environment variables:
+
+- `DATABASE_URL` — Postgres connection string (required by API and DB tooling)
+- API runtime: `PORT=8080`
+- Web runtime: `PORT=24974`, `BASE_PATH=/`
+- Optional for local development: `API_PROXY_TARGET=http://127.0.0.1:8080`
 
 ## Stack
 
@@ -30,7 +40,9 @@ SourceTradie helps Melbourne homeowners describe a problem, qualify the request 
 
 ## Architecture decisions
 
-- The first build uses a small in-memory demo store in the API server to prove the customer request → dispatch workflow without adding auth, payments, or production matching logic.
+- Phase 1 productionisation moves jobs, partners, dispatch offers, and status history to PostgreSQL via Drizzle.
+- Customer submission remains frictionless with no homeowner account creation required.
+- Authentication is intentionally deferred to a later phase.
 - Customer contact details are not returned in partner opportunity views; partner-facing demo data is intentionally limited until acceptance.
 - Safety-sensitive language stops ordinary flow and directs users to emergency services rather than attempting diagnosis.
 
