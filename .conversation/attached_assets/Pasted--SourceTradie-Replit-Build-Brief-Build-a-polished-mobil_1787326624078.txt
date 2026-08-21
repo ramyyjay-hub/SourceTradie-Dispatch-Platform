@@ -1,0 +1,307 @@
+# SourceTradie — Replit Build Brief
+
+Build a polished, mobile-first web application called **SourceTradie** for Melbourne, Australia.
+
+SourceTradie is **not a tradie directory**. It is a customer-first local trade dispatch platform.
+
+The core idea is:
+
+A homeowner describes what is wrong, SourceTradie qualifies the job, identifies the correct trade, captures location and timing, and then routes the request to an appropriate local tradie who can accept or decline the job.
+
+Initial trades:
+
+* Electricians
+* Plumbers
+* Heating & Cooling / HVAC
+
+Initial market:
+
+* Melbourne, Australia
+
+## Brand
+
+Brand name: **SourceTradie**
+
+Primary headline:
+**Something broken? SourceTradie it.**
+
+Supporting copy:
+**Tell us what’s wrong and we’ll help source the right local professional.**
+
+Primary CTA:
+**Source a Tradie**
+
+Secondary CTA:
+**Join as a Trade Partner**
+
+The visual style should feel like a premium modern Australian technology startup — simple, trustworthy, clean, fast and highly polished.
+
+Avoid:
+
+* Generic tradie-template styling
+* Construction clichés
+* Excessive hard-hat/tool imagery
+* Fake testimonials
+* Fake user counts
+* Fake tradie counts
+* Fake response times
+
+## Homepage
+
+Create:
+
+### Hero
+
+* SourceTradie logo/wordmark
+* Headline
+* Short explanation
+* Source a Tradie CTA
+* Plumbing / Electrical / Heating & Cooling service indicators
+
+### How it works
+
+1. Tell us what’s wrong
+2. We understand and qualify the job
+3. We source an appropriate available tradie
+4. The tradie accepts and the customer gets connected
+
+### Why SourceTradie
+
+Focus on:
+
+* No calling multiple tradies
+* Better-qualified job requests
+* Local matching
+* Availability-focused dispatch
+* Simple customer experience
+
+### Trade partner section
+
+Headline:
+**Got room for another job?**
+
+Explain that tradies can receive qualified local work based on their service area, job preferences and availability.
+
+State:
+**No subscription or lead fees during the Melbourne pilot.**
+
+CTA:
+**Join the Pilot**
+
+## Customer Job Flow
+
+Build a beautiful multi-step conversational intake.
+
+Ask:
+
+1. What’s going on?
+2. Do you know which service you need?
+
+   * Plumbing
+   * Electrical
+   * Heating & Cooling
+   * Not sure
+3. Ask relevant follow-up questions based on the problem.
+4. Suburb/postcode
+5. Urgency
+
+   * Emergency
+   * Today
+   * Next few days
+   * Flexible
+6. Preferred attendance time
+7. Optional photo upload
+8. Customer name
+9. Phone
+10. Email
+11. Final job summary
+12. Submit request
+
+After submission show:
+
+**Request received**
+
+Then show an elegant status screen:
+
+* Job understood
+* Trade identified
+* Location confirmed
+* Availability requested
+* Sourcing suitable professionals
+
+Generate a readable job reference such as:
+**ST-1042**
+
+Do NOT pretend a tradie has been matched if no real match exists.
+
+## Safety Logic
+
+Do not diagnose dangerous electrical, gas or plumbing situations.
+
+If the user mentions things such as:
+
+* Smell of gas
+* Sparks
+* Electrical fire
+* Live exposed wiring
+* Major flooding
+* Immediate danger
+
+Show a safety warning and recommend appropriate emergency action rather than continuing ordinary booking flow.
+
+## Tradie Portal
+
+Create a separate trade-partner login/dashboard.
+
+Tradie onboarding fields:
+
+* Business name
+* Contact name
+* ABN
+* Trade
+* Licence / registration number where relevant
+* Mobile
+* Email
+* Service suburbs
+* Travel radius
+* Services offered
+* Jobs they do not want
+* Normal working hours
+* After-hours availability
+* Minimum preferred job value
+* Emergency jobs yes/no
+
+Dashboard should show:
+
+### Availability
+
+Large toggle:
+**Accepting Jobs — ON / OFF**
+
+### New opportunities
+
+Each job card should include:
+
+* Job type
+* Suburb
+* Approximate distance
+* Urgency
+* Preferred time
+* Problem summary
+* Photos if provided
+
+Buttons:
+**Accept**
+**Decline**
+
+Do not expose customer contact details until a job is accepted.
+
+## Admin Dashboard
+
+Create an admin area showing:
+
+* New customer requests
+* Awaiting dispatch
+* Tradie applications
+* Approved tradies
+* Available tradies
+* Sent opportunities
+* Accepted jobs
+* Declined jobs
+* Completed jobs
+
+Allow admin to:
+
+* Approve/reject tradie applications
+* View job details
+* Assign/send jobs to tradies
+* Change job status
+* View tradie availability
+
+## Data Model
+
+Create database structures for:
+
+### Users
+
+* id
+* role
+* name
+* email
+* phone
+
+### Businesses
+
+* id
+* business name
+* ABN
+* trade
+* licence
+* service area
+* availability
+* services
+* preferences
+* status
+
+### Jobs
+
+* id
+* reference
+* customer
+* description
+* trade
+* suburb
+* postcode
+* urgency
+* preferred time
+* images
+* status
+* created date
+
+### Dispatches
+
+* job id
+* business id
+* offered timestamp
+* accepted/declined
+* response timestamp
+
+## UX Requirements
+
+Prioritise mobile.
+
+Use:
+
+* Large tap targets
+* Excellent typography
+* Simple transitions
+* Clear progress indicators
+* Card-based layouts
+* Fast perceived performance
+
+The homeowner experience should require almost no explanation.
+
+The interface should feel more like a modern consumer app than a marketplace directory.
+
+## V0 Constraints
+
+Do NOT build yet:
+
+* Payments
+* Subscription billing
+* Automated SMS
+* Full AI voice calling
+* Review marketplace
+* Native apps
+* Complex maps
+* Automated pricing
+* Full CRM
+* Invoicing
+
+Build the architecture so these can be added later.
+
+The goal of V0 is to prove:
+
+**Customer request → qualification → matching → tradie accepts → customer gets connected.**
+
+Create a working prototype with realistic sample data where required, while clearly distinguishing demo data from real activity.

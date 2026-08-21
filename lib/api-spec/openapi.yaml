@@ -10,6 +10,12 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: jobs
+    description: Customer job requests and dispatch state
+  - name: partners
+    description: Trade partner onboarding and availability
+  - name: admin
+    description: Admin dashboard summaries
 paths:
   /healthz:
     get:
@@ -24,7 +30,163 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /jobs:
+    get:
+      operationId: listJobs
+      tags: [jobs]
+      summary: List job requests
+      responses:
+        "200":
+          description: Job requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Job"
+    post:
+      operationId: createJob
+      tags: [jobs]
+      summary: Create a customer job request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobInput"
+      responses:
+        "201":
+          description: Request received
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+  /jobs/{id}:
+    get:
+      operationId: getJob
+      tags: [jobs]
+      summary: Get a job request
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Job request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "404":
+          description: Job not found
+    patch:
+      operationId: updateJob
+      tags: [jobs]
+      summary: Update a job status
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobUpdate"
+      responses:
+        "200":
+          description: Updated job request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+  /partners:
+    get:
+      operationId: listPartners
+      tags: [partners]
+      summary: List trade partners
+      responses:
+        "200":
+          description: Trade partners
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Partner"
+    post:
+      operationId: createPartner
+      tags: [partners]
+      summary: Submit a trade partner application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerInput"
+      responses:
+        "201":
+          description: Application submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Partner"
+  /partners/{id}/availability:
+    patch:
+      operationId: updatePartnerAvailability
+      tags: [partners]
+      summary: Update trade partner availability
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityInput"
+      responses:
+        "200":
+          description: Updated partner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Partner"
+  /dispatches/{id}/decision:
+    patch:
+      operationId: decideDispatch
+      tags: [jobs]
+      summary: Accept or decline a dispatched opportunity
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DispatchDecisionInput"
+      responses:
+        "200":
+          description: Updated dispatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dispatch"
+  /admin/summary:
+    get:
+      operationId: getAdminSummary
+      tags: [admin]
+      summary: Get admin dashboard summary
+      responses:
+        "200":
+          description: Admin dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSummary"
 components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: number
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +195,115 @@ components:
           type: string
       required:
         - status
+    Job:
+      type: object
+      required: [id, reference, description, trade, suburb, postcode, urgency, preferredTime, status, createdAt]
+      properties:
+        id: { type: number }
+        reference: { type: string }
+        description: { type: string }
+        trade: { type: string }
+        suburb: { type: string }
+        postcode: { type: string }
+        urgency: { type: string }
+        preferredTime: { type: string }
+        status: { type: string }
+        customerName: { type: string }
+        customerPhone: { type: ["string", "null"] }
+        customerEmail: { type: ["string", "null"] }
+        createdAt: { type: string }
+        images:
+          type: array
+          items: { type: string }
+    JobInput:
+      type: object
+      required: [description, trade, suburb, postcode, urgency, preferredTime, customerName]
+      properties:
+        description: { type: string, minLength: 4 }
+        trade: { type: string }
+        suburb: { type: string }
+        postcode: { type: string }
+        urgency: { type: string }
+        preferredTime: { type: string }
+        customerName: { type: string }
+        customerPhone: { type: string }
+        customerEmail: { type: string }
+        images:
+          type: array
+          items: { type: string }
+    JobUpdate:
+      type: object
+      properties:
+        status: { type: string }
+    Partner:
+      type: object
+      required: [id, businessName, contactName, trade, suburbs, availability, status]
+      properties:
+        id: { type: number }
+        businessName: { type: string }
+        contactName: { type: string }
+        abn: { type: ["string", "null"] }
+        trade: { type: string }
+        suburbs:
+          type: array
+          items: { type: string }
+        radiusKm: { type: number }
+        availability: { type: boolean }
+        status: { type: string }
+        services:
+          type: array
+          items: { type: string }
+        emergencyJobs: { type: boolean }
+    PartnerInput:
+      type: object
+      required: [businessName, contactName, trade, mobile, email, suburbs, radiusKm]
+      properties:
+        businessName: { type: string }
+        contactName: { type: string }
+        abn: { type: string }
+        trade: { type: string }
+        licence: { type: string }
+        mobile: { type: string }
+        email: { type: string }
+        suburbs:
+          type: array
+          items: { type: string }
+        radiusKm: { type: number }
+        services:
+          type: array
+          items: { type: string }
+        emergencyJobs: { type: boolean }
+    AvailabilityInput:
+      type: object
+      required: [availability]
+      properties:
+        availability: { type: boolean }
+    Dispatch:
+      type: object
+      required: [id, jobId, businessId, decision]
+      properties:
+        id: { type: number }
+        jobId: { type: number }
+        businessId: { type: number }
+        decision: { type: string }
+        offeredAt: { type: string }
+        respondedAt: { type: ["string", "null"] }
+    DispatchDecisionInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string }
+    AdminSummary:
+      type: object
+      required: [newRequests, awaitingDispatch, tradieApplications, approvedTradies, availableTradies, sentOpportunities, acceptedJobs, declinedJobs, completedJobs]
+      properties:
+        newRequests: { type: number }
+        awaitingDispatch: { type: number }
+        tradieApplications: { type: number }
+        approvedTradies: { type: number }
+        availableTradies: { type: number }
+        sentOpportunities: { type: number }
+        acceptedJobs: { type: number }
+        declinedJobs: { type: number }
+        completedJobs: { type: number }
 

@@ -1,6 +1,6 @@
-# [Project name]
+# SourceTradie
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+SourceTradie helps Melbourne homeowners describe a problem, qualify the request safely, and source an appropriate local trade partner.
 
 ## Run & Operate
 
@@ -22,15 +22,21 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/source-tradie/src/pages/` — landing, customer request, partner, partner dashboard, and admin experiences
+- `artifacts/source-tradie/src/components/source-ui.tsx` — shared brand primitives and status UI
+- `lib/api-spec/openapi.yaml` — source of truth for jobs, partners, dispatch, and admin summary API contracts
+- `artifacts/api-server/src/routes/source-tradie.ts` — V0 API behavior and clearly seeded demo activity
+- `artifacts/source-tradie/src/index.css` — SourceTradie visual tokens and typography
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The first build uses a small in-memory demo store in the API server to prove the customer request → dispatch workflow without adding auth, payments, or production matching logic.
+- Customer contact details are not returned in partner opportunity views; partner-facing demo data is intentionally limited until acceptance.
+- Safety-sensitive language stops ordinary flow and directs users to emergency services rather than attempting diagnosis.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The V0 includes a public landing page, conversational customer intake with safety gating and photo attachment, truthful request status, trade partner onboarding and availability, partner opportunity decisions, and an admin dispatch summary.
 
 ## User preferences
 
@@ -38,7 +44,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Keep the demo label visible anywhere seeded activity is shown; seeded requests are not live matches.
+- When changing the OpenAPI spec, use number rather than integer until the generated Zod package is upgraded to a version supporting zod.int().
 
 ## Pointers
 

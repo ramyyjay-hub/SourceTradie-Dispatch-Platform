@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "SourceTradie"
+description = "A mobile-first Melbourne trade dispatch platform that helps homeowners describe problems, qualify jobs, and connect with suitable local tradies while giving trade partners and admins clear dispatch workflows."
+version = "1.0.0"
+id = "artifacts/source-tradie"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24974
+
+[services.development]
+run = "pnpm --filter @workspace/source-tradie run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/source-tradie", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/source-tradie/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24974"
+BASE_PATH = "/"

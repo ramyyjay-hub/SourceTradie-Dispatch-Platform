@@ -1,0 +1,1 @@
+- [SourceTradie API generation](source-tradie-api-generation.md) — current generated Zod runtime does not support OpenAPI integer output; use number for generated API contracts.
