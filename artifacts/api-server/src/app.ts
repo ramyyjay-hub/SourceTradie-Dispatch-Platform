@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type {} from "./types/express";
 import express, { type Express } from "express";
 import cors from "cors";
 import * as pinoHttpModule from "pino-http";
