@@ -28,8 +28,15 @@ import {
   StepIndicator,
 } from '@/components/source-ui';
 import { extractExplicitPreferredTime } from '@/lib/intake-time';
+import {
+  getNextRequestFlowStep,
+  getPreviousRequestFlowStep,
+  getRequestFlowLabels,
+  getRequestFlowSteps,
+  hasUrgentSafetySignal,
+  type RequestFlowStep,
+} from '@/lib/request-flow';
 
-const steps = ['Problem', 'Safety check', 'Your details', 'Submitted'];
 const initialForm = {
   description: '',
   trade: 'Not sure',
@@ -61,7 +68,7 @@ export default function RequestPage() {
 }
 
 function RequestFlow({ onSubmitted }: { onSubmitted: (job: CreateJobResponse) => void }) {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<RequestFlowStep>('problem');
   const [form, setForm] = useState(initialForm);
   const [photos, setPhotos] = useState<File[]>([]);
   const [safetyConfirmed, setSafetyConfirmed] = useState(false);
@@ -69,9 +76,11 @@ function RequestFlow({ onSubmitted }: { onSubmitted: (job: CreateJobResponse) =>
   const [error, setError] = useState('');
   const createJob = useCreateJob();
   const urgentSignal = useMemo(
-    () => /\b(?:smell(?:ing)?\s+(?:of\s+)?gas|gas\s+smell|gas\s+leak(?:ing)?|smoke|fire|flames?|sparks?|sparking|electrical\s+(?:fire|danger)|(?:exposed\s+)?live\s+(?:wire|wiring)|(?:major|severe|uncontrolled)\s+(?:water\s+)?flood(?:ing)?|immediate\s+danger)\b/i.test(form.description),
+    () => hasUrgentSafetySignal(form.description),
     [form.description],
   );
+  const flowSteps = getRequestFlowSteps(urgentSignal);
+  const stepIndex = flowSteps.indexOf(step);
 
   const update = (key: keyof typeof initialForm, value: string) => {
     if (key === 'preferredTime') {
@@ -93,19 +102,15 @@ function RequestFlow({ onSubmitted }: { onSubmitted: (job: CreateJobResponse) =>
 
   const next = () => {
     setError('');
-    if (step === 0 && form.description.trim().length < 4) {
+    if (step === 'problem' && form.description.trim().length < 4) {
       setError('Give us a little more detail so we can qualify the right help.');
       return;
     }
-    if (step === 0 && urgentSignal) {
-      setStep(1);
-      return;
-    }
-    if (step === 1 && !safetyConfirmed) {
+    if (step === 'safety' && !safetyConfirmed) {
       setError('Please confirm you’ve read the immediate safety step.');
       return;
     }
-    setStep((current) => Math.min(current + 1, 3));
+    setStep(getNextRequestFlowStep(step, urgentSignal));
   };
 
   const submit = () => {
@@ -138,17 +143,17 @@ function RequestFlow({ onSubmitted }: { onSubmitted: (job: CreateJobResponse) =>
           <div>
             <SectionLabel>New home request</SectionLabel>
             <h1 className="mt-2 max-w-xl text-4xl font-bold leading-[.95] tracking-[-.07em] md:text-6xl">
-              {step === 3 ? 'You’re in the queue.' : 'Let’s get a clear picture.'}
+              {step === 'review' ? 'You’re in the queue.' : 'Let’s get a clear picture.'}
             </h1>
           </div>
-          <StepIndicator step={step} labels={steps} />
+          <StepIndicator step={stepIndex} labels={getRequestFlowLabels(urgentSignal)} />
         </div>
 
         <div className="mt-10">
-          {step === 0 && <ProblemStep form={form} update={update} />}
-          {step === 1 && <SafetyStep confirmed={safetyConfirmed} setConfirmed={setSafetyConfirmed} />}
-          {step === 2 && <DetailsStep form={form} update={update} photos={photos} setPhotos={setPhotos} />}
-          {step === 3 && <ReviewStep form={form} />}
+          {step === 'problem' && <ProblemStep form={form} update={update} />}
+          {step === 'safety' && <SafetyStep confirmed={safetyConfirmed} setConfirmed={setSafetyConfirmed} />}
+          {step === 'details' && <DetailsStep form={form} update={update} photos={photos} setPhotos={setPhotos} />}
+          {step === 'review' && <ReviewStep form={form} />}
         </div>
 
         {error && (
@@ -161,10 +166,10 @@ function RequestFlow({ onSubmitted }: { onSubmitted: (job: CreateJobResponse) =>
         )}
 
         <div className="mt-8 flex items-center justify-between gap-3 border-t border-[hsl(var(--border))] pt-6">
-          {step > 0 && step < 3 ? (
+          {step !== 'problem' && step !== 'review' ? (
             <button
               className="btn-quiet"
-              onClick={() => setStep((current) => current - 1)}
+              onClick={() => setStep(getPreviousRequestFlowStep(step, urgentSignal))}
               data-testid="button-request-back"
             >
               <ArrowLeft size={16} /> Back
@@ -173,7 +178,7 @@ function RequestFlow({ onSubmitted }: { onSubmitted: (job: CreateJobResponse) =>
             <span />
           )}
 
-          {step < 3 ? (
+          {step !== 'review' ? (
             <button className="btn-accent" onClick={next} data-testid="button-request-next">
               Continue <ArrowRight size={16} />
             </button>
