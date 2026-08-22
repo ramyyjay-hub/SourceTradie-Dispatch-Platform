@@ -30,4 +30,37 @@ describe("classifySafety", () => {
       codes: expect.arrayContaining([code]),
     });
   });
+
+  it.each([
+    "There is no flooding, electrical issue, gas smell, or immediate danger.",
+    "I can't smell gas.",
+    "There are no sparks.",
+    "The pipe is leaking slowly but it is not flooding.",
+    "Hot water stopped working. No other issues.",
+    "Gas smell is not present.",
+    "Sparks are not visible.",
+  ])("does not escalate clearly negated hazards: %s", (description) => {
+    expect(classifySafety(description)).toMatchObject({
+      level: "standard",
+      interruptFlow: false,
+      codes: [],
+    });
+  });
+
+  it.each([
+    ["I can smell gas.", "GAS_SMELL"],
+    ["There are sparks coming from the switchboard.", "SPARKS"],
+    ["The house is flooding.", "MAJOR_FLOODING"],
+    ["I can see exposed live wires.", "EXPOSED_LIVE_WIRING"],
+    ["There was no gas smell earlier, but now I can smell gas.", "GAS_SMELL"],
+    ["I'm not sure if I can smell gas.", "GAS_SMELL"],
+    ["I can't smell gas, but there are sparks.", "SPARKS"],
+    ["No flooding, gas smell reported near the meter.", "GAS_SMELL"],
+  ])("escalates current or ambiguous hazards: %s", (description, code) => {
+    expect(classifySafety(description)).toMatchObject({
+      level: "emergency",
+      interruptFlow: true,
+      codes: expect.arrayContaining([code]),
+    });
+  });
 });

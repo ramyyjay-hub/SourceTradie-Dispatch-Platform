@@ -1,10 +1,9 @@
+import { detectSevereSafetyCodes } from '@workspace/api-zod';
+
 export type RequestFlowStep = 'problem' | 'safety' | 'details' | 'review';
 
-const urgentSignalPattern =
-  /\b(?:smell(?:ing)?\s+(?:of\s+)?gas|gas\s+smell|gas\s+leak(?:ing)?|smoke|fire|flames?|sparks?|sparking|electrical\s+(?:fire|danger)|(?:exposed\s+)?live\s+(?:wire|wiring)|(?:major|severe|uncontrolled)\s+(?:water\s+)?flood(?:ing)?|immediate\s+danger)\b/i;
-
 export function hasUrgentSafetySignal(description: string) {
-  return urgentSignalPattern.test(description);
+  return detectSevereSafetyCodes(description).length > 0;
 }
 
 export function getRequestFlowSteps(

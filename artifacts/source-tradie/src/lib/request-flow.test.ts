@@ -26,4 +26,29 @@ describe('request flow safety routing', () => {
     expect(getNextRequestFlowStep('problem', true)).toBe('safety');
     expect(getRequestFlowLabels(true)).toContain('Safety check');
   });
+
+  it.each([
+    'There is no flooding, electrical issue, gas smell, or immediate danger.',
+    "I can't smell gas.",
+    'There are no sparks.',
+    'The pipe is leaking slowly but it is not flooding.',
+    'Hot water stopped working. No other issues.',
+    'Gas smell is not present.',
+    'Sparks are not visible.',
+  ])('does not route clearly negated hazards to safety: %s', (description) => {
+    expect(hasUrgentSafetySignal(description)).toBe(false);
+  });
+
+  it.each([
+    'I can smell gas.',
+    'There are sparks coming from the switchboard.',
+    'The house is flooding.',
+    'I can see exposed live wires.',
+    'There was no gas smell earlier, but now I can smell gas.',
+    "I'm not sure if I can smell gas.",
+    "I can't smell gas, but there are sparks.",
+    'No flooding, gas smell reported near the meter.',
+  ])('routes current or ambiguous hazards to safety: %s', (description) => {
+    expect(hasUrgentSafetySignal(description)).toBe(true);
+  });
 });
