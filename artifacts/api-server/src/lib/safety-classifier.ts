@@ -1,5 +1,6 @@
 export const severeSafetyCodes = [
   "GAS_SMELL",
+  "SMOKE_OR_FIRE",
   "SPARKS",
   "ELECTRICAL_FIRE",
   "EXPOSED_LIVE_WIRING",
@@ -17,11 +18,18 @@ export type SafetyClassification = {
 };
 
 const severeTriggers: Array<[SafetyCode, RegExp]> = [
-  ["GAS_SMELL", /\b(?:smell(?:ing)?\s+(?:of\s+)?gas|gas\s+smell)\b/i],
+  [
+    "GAS_SMELL",
+    /\b(?:smell(?:ing)?\s+(?:of\s+)?gas|gas\s+smell|gas\s+leak(?:ing)?)\b/i,
+  ],
+  ["SMOKE_OR_FIRE", /\b(?:smoke|fire|flames?)\b/i],
   ["SPARKS", /\b(?:sparks?|sparking)\b/i],
-  ["ELECTRICAL_FIRE", /\belectrical\s+fire\b/i],
+  ["ELECTRICAL_FIRE", /\belectrical\s+(?:fire|danger)\b/i],
   ["EXPOSED_LIVE_WIRING", /\b(?:exposed\s+)?live\s+(?:wire|wiring)\b/i],
-  ["MAJOR_FLOODING", /\b(?:major\s+flood(?:ing)?|severe\s+flood(?:ing)?)\b/i],
+  [
+    "MAJOR_FLOODING",
+    /\b(?:major|severe|uncontrolled)\s+(?:water\s+)?flood(?:ing)?\b/i,
+  ],
   ["IMMEDIATE_DANGER", /\bimmediate\s+danger\b/i],
 ];
 

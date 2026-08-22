@@ -122,6 +122,60 @@ describe("source tradie repository", () => {
     await client.close();
   });
 
+  it("keeps an explicit preferred time customer-confirmed when the AI draft differs", async () => {
+    let providerPreferredTime = "";
+    const provider: JobAiProvider = {
+      assess: async (input) => {
+        providerPreferredTime = input.preferredAttendanceTime;
+        return {
+          provider: "openai",
+          model: "test-model",
+          outcome: "success",
+          assessment: {
+            tradeClassification: "plumbing",
+            urgencyClassification: "today",
+            suburb: "Wollert",
+            postcode: "3750",
+            preferredAttendanceTime: "Flexible",
+            neutralProblemSummary: "Hot water system stopped working.",
+            equipment: "Hot water system",
+            brand: null,
+            model: null,
+            photoContext: { provided: false, count: 0 },
+            confidence: "medium",
+            codes: ["ROUTING_REVIEW"],
+          },
+        };
+      },
+    };
+    const { repository, db, client } = await buildRepository(provider);
+    const job = await repository.createJob({
+      description:
+        "My hot water system stopped working this morning. I'm in Wollert and would like someone this afternoon if possible.",
+      trade: "Plumbing",
+      suburb: "Wollert",
+      postcode: "3750",
+      urgency: "Today",
+      preferredTime: "This afternoon",
+      customerName: "Alex Morgan",
+    });
+
+    expect(providerPreferredTime).toBe("This afternoon");
+    expect(job.preferredTime).toBe("This afternoon");
+    expect(job.assessment?.assessment.preferredAttendanceTime).toBe("Flexible");
+
+    const publicStatus = await repository.getPublicJobStatusByToken(
+      job.id,
+      job.statusAccessToken,
+    );
+    expect(publicStatus?.intake.preferredTime).toBe("This afternoon");
+    const submissions = await db.select().from(jobIntakeSubmissionsTable);
+    expect(submissions[0]?.customerConfirmedValues).toMatchObject({
+      preferredTime: "This afternoon",
+    });
+    await client.close();
+  });
+
   it("enforces invalid job status transitions", async () => {
     const { repository, client } = await buildRepository();
 

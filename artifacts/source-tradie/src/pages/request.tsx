@@ -12,7 +12,7 @@ import {
   Phone,
   ShieldCheck,
 } from 'lucide-react';
-import { Link, useLocation, useParams } from 'wouter';
+import { Link, useLocation, useParams, useSearch } from 'wouter';
 import {
   getGetJobQueryKey,
   useCorrectJobIntake,
@@ -27,6 +27,7 @@ import {
   Skeleton,
   StepIndicator,
 } from '@/components/source-ui';
+import { extractExplicitPreferredTime } from '@/lib/intake-time';
 
 const steps = ['Problem', 'Safety check', 'Your details', 'Submitted'];
 const initialForm = {
@@ -43,9 +44,10 @@ const initialForm = {
 
 export default function RequestPage() {
   const params = useParams<{ id?: string }>();
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
   const initialId = Number(params.id ?? 0);
-  const statusToken = new URLSearchParams((location.split('?')[1] ?? '')).get('token') ?? '';
+  const statusToken = new URLSearchParams(search).get('token') ?? '';
 
   if (params.id) {
     return <RequestStatus id={initialId} token={statusToken} />;
@@ -53,7 +55,7 @@ export default function RequestPage() {
 
   return (
     <RequestFlow
-      onSubmitted={(job) => setLocation(`/request/${job.id}?token=${job.statusAccessToken}`)}
+      onSubmitted={(job) => setLocation(job.statusAccessUrl)}
     />
   );
 }
@@ -63,15 +65,31 @@ function RequestFlow({ onSubmitted }: { onSubmitted: (job: CreateJobResponse) =>
   const [form, setForm] = useState(initialForm);
   const [photos, setPhotos] = useState<File[]>([]);
   const [safetyConfirmed, setSafetyConfirmed] = useState(false);
+  const [preferredTimeEdited, setPreferredTimeEdited] = useState(false);
   const [error, setError] = useState('');
   const createJob = useCreateJob();
   const urgentSignal = useMemo(
-    () => /\b(?:smell(?:ing)?\s+(?:of\s+)?gas|gas\s+smell|sparks?|sparking|electrical\s+fire|(?:exposed\s+)?live\s+(?:wire|wiring)|major\s+flood(?:ing)?|severe\s+flood(?:ing)?|immediate\s+danger)\b/i.test(form.description),
+    () => /\b(?:smell(?:ing)?\s+(?:of\s+)?gas|gas\s+smell|gas\s+leak(?:ing)?|smoke|fire|flames?|sparks?|sparking|electrical\s+(?:fire|danger)|(?:exposed\s+)?live\s+(?:wire|wiring)|(?:major|severe|uncontrolled)\s+(?:water\s+)?flood(?:ing)?|immediate\s+danger)\b/i.test(form.description),
     [form.description],
   );
 
-  const update = (key: keyof typeof initialForm, value: string) =>
-    setForm((current) => ({ ...current, [key]: value }));
+  const update = (key: keyof typeof initialForm, value: string) => {
+    if (key === 'preferredTime') {
+      setPreferredTimeEdited(true);
+    }
+
+    setForm((current) => {
+      if (key === 'description' && !preferredTimeEdited) {
+        return {
+          ...current,
+          description: value,
+          preferredTime:
+            extractExplicitPreferredTime(value) ?? current.preferredTime,
+        };
+      }
+      return { ...current, [key]: value };
+    });
+  };
 
   const next = () => {
     setError('');
@@ -349,6 +367,12 @@ function DetailsStep({
           data-testid="select-preferred-time"
         >
           <option>Flexible</option>
+          <option>This morning</option>
+          <option>This afternoon</option>
+          <option>This evening</option>
+          <option>Tonight</option>
+          <option>Tomorrow morning</option>
+          <option>Tomorrow afternoon</option>
           <option>Weekday morning</option>
           <option>Weekday afternoon</option>
           <option>Evening</option>
