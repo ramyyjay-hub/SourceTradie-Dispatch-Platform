@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AcceptedTradie } from './acceptedTradie';
 import type { CustomerConfirmedIntake } from './customerConfirmedIntake';
 import type { JobAssessment } from './jobAssessment';
 
@@ -15,4 +16,5 @@ export interface PublicJobStatus {
   updatedAt: string;
   intake: CustomerConfirmedIntake;
   assessment?: JobAssessment | null;
+  acceptedTradie: AcceptedTradie | null;
 }

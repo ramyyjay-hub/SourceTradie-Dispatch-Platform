@@ -17,5 +17,8 @@ export interface JobInput {
   customerName: string;
   customerPhone?: string;
   customerEmail?: string;
+  /** @minLength 3 */
+  serviceAddressLine1: string;
+  serviceAddressLine2?: string;
   images?: string[];
 }

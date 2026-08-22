@@ -1,25 +1,205 @@
-import { useMemo, useState } from 'react';
-import { CalendarDays, ChevronDown, Clock3, MapPin, Radio, RefreshCw, ShieldCheck, SlidersHorizontal, UserRound } from 'lucide-react';
-import { Link } from 'wouter';
-import { useDecideDispatch, useListPartnerOffers, useListPartners, useUpdatePartnerAvailability } from '@workspace/api-client-react';
-import { AppFrame, EmptyState, SectionLabel, Skeleton, StatCard } from '@/components/source-ui';
+import { useState } from "react";
+import {
+  CalendarDays,
+  Clock3,
+  MapPin,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
+import { Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useDecideDispatch,
+  useListPartnerOffers,
+  useListPartners,
+  useUpdatePartnerAvailability,
+} from "@workspace/api-client-react";
+import {
+  AppFrame,
+  EmptyState,
+  SectionLabel,
+  Skeleton,
+  StatCard,
+  StatusPill,
+} from "@/components/source-ui";
 
 export default function PartnerDashboard() {
-  const nav = <div className="space-y-2"><Link href="/partner/dashboard" className="flex items-center gap-3 rounded-xl bg-[hsl(var(--sidebar-accent))] px-3 py-3 text-sm font-semibold" data-testid="sidebar-partner-dashboard"><CalendarDays size={17} /> Dashboard</Link><Link href="/partner" className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-[hsl(var(--sidebar-foreground)/.66)] hover:bg-[hsl(var(--sidebar-accent))]" data-testid="sidebar-partner-application"><UserRound size={17} /> Application</Link></div>;
-  return <AppFrame header={nav}><div className="border-b border-[hsl(var(--border))] bg-[hsl(var(--card)/.72)]"><div className="content-wrap flex min-h-[78px] items-center justify-between gap-3"><div><p className="font-mono-ui text-[10px] uppercase tracking-[.17em] text-[hsl(var(--secondary))]">Partner desk</p><h1 className="mt-1 text-xl font-bold tracking-[-.04em] md:text-2xl">Your opportunity dashboard</h1></div><Link href="/partner" className="btn-quiet hidden text-sm sm:inline-flex" data-testid="link-dashboard-application">Update application</Link></div></div><DashboardBody /></AppFrame>;
+  const nav = (
+    <div>
+      <Link
+        href="/partner/dashboard"
+        className="flex items-center gap-3 rounded-xl bg-[hsl(var(--sidebar-accent))] px-3 py-3 text-sm font-semibold"
+      >
+        <CalendarDays size={17} /> Dashboard
+      </Link>
+    </div>
+  );
+  return (
+    <AppFrame header={nav}>
+      <header className="border-b">
+        <div className="content-wrap py-5">
+          <SectionLabel>Partner desk</SectionLabel>
+          <h1 className="mt-1 text-2xl font-bold">Your opportunities</h1>
+        </div>
+      </header>
+      <Dashboard />
+    </AppFrame>
+  );
 }
 
-function DashboardBody() {
-  const { data: partners, isLoading, isError, refetch } = useListPartners();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const updateAvailability = useUpdatePartnerAvailability();
-  const offersQuery = useListPartnerOffers();
-  const decideDispatch = useDecideDispatch();
-  const partner = useMemo(() => partners?.find((item) => item.id === selectedId) ?? partners?.[0], [partners, selectedId]);
-  if (isLoading) return <div className="content-wrap py-10"><Skeleton className="h-8 w-52" /><div className="mt-8 grid gap-4 md:grid-cols-3"><Skeleton className="h-32" /><Skeleton className="h-32" /><Skeleton className="h-32" /></div></div>;
-  if (isError) return <div className="content-wrap py-20"><EmptyState title="Partner desk is offline" detail="We couldn’t load your partner profile." action={<button className="btn-main" onClick={() => refetch()} data-testid="button-retry-partners"><RefreshCw size={16} /> Try again</button>} /></div>;
-  if (!partner) return <div className="content-wrap py-20"><EmptyState title="No partner profile yet" detail="Apply to join SourceTradie and your dashboard will appear after the application is received." action={<Link href="/partner" className="btn-accent" data-testid="link-empty-apply">Start an application</Link>} /></div>;
-  const toggle = () => updateAvailability.mutate({ id: partner.id, data: { availability: !partner.availability } });
-  const opportunities = (offersQuery.data ?? []).map((offer) => ({ id: offer.id, trade: offer.job?.trade ?? partner.trade, suburb: offer.job?.suburb ?? '', title: offer.job?.description ?? 'Dispatch opportunity', timing: offer.job?.preferredTime ?? 'Flexible', status: offer.state }));
-  return <div className="content-wrap py-8 pb-24 md:py-10"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><SectionLabel>Good morning, {partner.contactName.split(' ')[0]}</SectionLabel><h2 className="mt-2 text-4xl font-bold tracking-[-.07em]">Your patch, your call.</h2></div><div className="flex items-center gap-2">{(partners?.length ?? 0) > 1 && <div className="relative"><select className="field min-h-[42px] w-auto pr-9 text-sm" value={partner.id} onChange={(event) => setSelectedId(Number(event.target.value))} data-testid="select-partner-profile">{partners?.map((item) => <option value={item.id} key={item.id}>{item.businessName}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-3 top-3.5" /></div>}<button className={`inline-flex min-h-[42px] items-center gap-2 rounded-full px-4 text-sm font-bold ${partner.availability ? 'bg-[hsl(var(--secondary))] text-[hsl(var(--secondary-foreground))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'}`} onClick={toggle} disabled={updateAvailability.isPending} data-testid="button-toggle-availability"><Radio size={15} /> {partner.availability ? 'Available today' : 'Currently offline'}</button></div></div><div className="mt-8 grid gap-4 sm:grid-cols-3"><StatCard label="Availability" value={partner.availability ? 'On' : 'Off'} detail={partner.availability ? 'You can receive opportunities' : 'No new opportunities will be offered'} accent={partner.availability} /><StatCard label="Coverage" value={`${partner.radiusKm ?? 15} km`} detail={partner.suburbs.slice(0, 3).join(' · ')} /><StatCard label="Approval" value={partner.status} detail="Profile status from SourceTradie" /></div><div className="mt-10 grid gap-8 lg:grid-cols-[1.2fr_.8fr]" data-testid="partner-live-offers"><section><div className="flex items-end justify-between"><div><SectionLabel>Opportunity inbox</SectionLabel><h3 className="mt-2 text-2xl font-bold tracking-[-.05em]">A quieter way to fill the gaps.</h3></div><span className="font-mono-ui text-[10px] uppercase tracking-[.1em] text-[hsl(var(--muted-foreground))]">Live activity</span></div><div className="mt-5 space-y-3">{opportunities.map((opportunity) => <div className="glass-card rounded-2xl p-5" key={opportunity.id} data-testid={`card-opportunity-${opportunity.id}`}><div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-[hsl(var(--muted))] px-2.5 py-1 font-mono-ui text-[10px] uppercase tracking-[.08em]">{opportunity.trade}</span><span className="text-xs text-[hsl(var(--muted-foreground))]">{opportunity.status}</span></div><h4 className="mt-3 text-lg font-bold tracking-[-.035em]">{opportunity.title}</h4><p className="mt-2 flex items-center gap-2 text-sm text-[hsl(var(--muted-foreground))]"><MapPin size={14} />{opportunity.suburb} <span>·</span> <Clock3 size={14} /> {opportunity.timing}</p></div><SlidersHorizontal size={17} className="text-[hsl(var(--muted-foreground))]" /></div><p className="mt-4 border-t border-[hsl(var(--border))] pt-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Customer details become available after acceptance.</p><div className="mt-4 flex gap-2"><button className="btn-main min-h-[40px] px-4 text-xs" data-testid={`button-accept-opportunity-${opportunity.id}`} disabled={opportunity.status !== 'pending' || decideDispatch.isPending} onClick={() => decideDispatch.mutate({ id: opportunity.id, data: { decision: 'accepted' } })}>Accept opportunity</button><button className="btn-quiet min-h-[40px] border border-[hsl(var(--border))] px-4 text-xs" data-testid={`button-decline-opportunity-${opportunity.id}`} disabled={opportunity.status !== 'pending' || decideDispatch.isPending} onClick={() => decideDispatch.mutate({ id: opportunity.id, data: { decision: 'declined' } })}>Pass for now</button></div></div>)}</div></section><aside className="space-y-4"><div className="rounded-2xl bg-[hsl(var(--primary))] p-6 text-[hsl(var(--primary-foreground))]"><div className="flex items-center gap-3"><ShieldCheck size={19} className="text-[hsl(var(--accent))]" /><SectionLabel>Availability note</SectionLabel></div><p className="mt-4 text-xl font-semibold leading-7">Keep this switch honest. It controls whether new work can find you.</p><p className="mt-4 text-sm leading-6 text-[hsl(var(--primary-foreground)/.62)]">You can change it anytime. SourceTradie never assumes you’re free.</p></div><div className="glass-card rounded-2xl p-5"><SectionLabel>Your suburbs</SectionLabel><div className="mt-4 flex flex-wrap gap-2">{partner.suburbs.map((suburb) => <span key={suburb} className="rounded-full border border-[hsl(var(--border))] px-3 py-1.5 text-xs">{suburb}</span>)}</div><p className="mt-5 flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]"><CalendarDays size={14} /> Emergency jobs: {partner.emergencyJobs ? 'open' : 'not selected'}</p></div></aside></div></div>;
+function Dashboard() {
+  const partners = useListPartners();
+  const offers = useListPartnerOffers();
+  const availability = useUpdatePartnerAvailability();
+  const decide = useDecideDispatch();
+  const queryClient = useQueryClient();
+  const [etas, setEtas] = useState<Record<number, string>>({});
+  const partner = partners.data?.[0];
+  if (partners.isLoading)
+    return (
+      <div className="content-wrap py-10">
+        <Skeleton className="h-40" />
+      </div>
+    );
+  if (!partner)
+    return (
+      <div className="content-wrap py-20">
+        <EmptyState
+          title="No partner profile"
+          detail="A linked approved profile is required."
+          action={
+            <button className="btn-main" onClick={() => partners.refetch()}>
+              <RefreshCw size={16} /> Retry
+            </button>
+          }
+        />
+      </div>
+    );
+  const act = (id: number, decision: "accepted" | "declined") =>
+    decide.mutate(
+      {
+        id,
+        data: {
+          decision,
+          eta: decision === "accepted" ? etas[id] || undefined : undefined,
+        },
+      },
+      { onSuccess: () => queryClient.invalidateQueries() },
+    );
+  return (
+    <main className="content-wrap py-10 pb-24">
+      <div className="flex items-end justify-between">
+        <div>
+          <SectionLabel>{partner.businessName}</SectionLabel>
+          <h2 className="mt-2 text-4xl font-bold">Your patch, your call.</h2>
+        </div>
+        <button
+          className="btn-quiet border"
+          onClick={() =>
+            availability.mutate({
+              id: partner.id,
+              data: { availability: !partner.availability },
+            })
+          }
+        >
+          {partner.availability ? "Available" : "Offline"}
+        </button>
+      </div>
+      <div className="mt-8 grid gap-3 sm:grid-cols-3">
+        <StatCard
+          label="Availability"
+          value={partner.availability ? "On" : "Off"}
+          accent={partner.availability}
+        />
+        <StatCard label="Coverage" value={`${partner.radiusKm ?? 15} km`} />
+        <StatCard label="Approval" value={partner.status} />
+      </div>
+      <section className="mt-10">
+        <SectionLabel>Opportunity inbox</SectionLabel>
+        <div className="mt-4 space-y-4">
+          {(offers.data ?? []).map((offer) => (
+            <article
+              className="rounded-2xl border bg-[hsl(var(--card))] p-5"
+              key={offer.id}
+              data-testid={`card-opportunity-${offer.id}`}
+            >
+              <div className="flex justify-between gap-3">
+                <div>
+                  <StatusPill status={offer.state} />
+                  <h3 className="mt-3 text-lg font-bold">
+                    {offer.job?.description}
+                  </h3>
+                  <p className="mt-2 flex gap-2 text-sm text-[hsl(var(--muted-foreground))]">
+                    <MapPin size={15} /> {offer.job?.suburb}{" "}
+                    {offer.job?.postcode} · <Clock3 size={15} />{" "}
+                    {offer.job?.preferredTime}
+                  </p>
+                </div>
+                <ShieldCheck size={18} />
+              </div>
+              {offer.state === "accepted" ? (
+                <div
+                  className="mt-4 rounded-xl bg-[hsl(var(--muted))] p-4 text-sm"
+                  data-testid={`accepted-details-${offer.id}`}
+                >
+                  <strong>Customer details</strong>
+                  <p>{offer.job?.customerName}</p>
+                  <p>
+                    {offer.job?.customerPhone} · {offer.job?.customerEmail}
+                  </p>
+                  <p>
+                    {offer.job?.serviceAddressLine1}
+                    {offer.job?.serviceAddressLine2
+                      ? `, ${offer.job.serviceAddressLine2}`
+                      : ""}
+                    , {offer.job?.suburb} {offer.job?.postcode}
+                  </p>
+                  {offer.eta && <p className="mt-2">ETA/status: {offer.eta}</p>}
+                </div>
+              ) : (
+                <p className="mt-4 text-xs text-[hsl(var(--muted-foreground))]">
+                  Customer contact and exact address stay hidden until you
+                  accept.
+                </p>
+              )}
+              {offer.state === "pending" && (
+                <div className="mt-4">
+                  <input
+                    className="field"
+                    value={etas[offer.id] ?? ""}
+                    onChange={(event) =>
+                      setEtas((current) => ({
+                        ...current,
+                        [offer.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="Optional ETA/status, e.g. 45 minutes"
+                    data-testid={`input-eta-${offer.id}`}
+                  />
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      className="btn-main"
+                      onClick={() => act(offer.id, "accepted")}
+                      disabled={decide.isPending}
+                      data-testid={`button-accept-opportunity-${offer.id}`}
+                    >
+                      Accept
+                    </button>
+                    <button
+                      className="btn-quiet border"
+                      onClick={() => act(offer.id, "declined")}
+                      disabled={decide.isPending}
+                      data-testid={`button-decline-opportunity-${offer.id}`}
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
 }

@@ -1,45 +1,250 @@
-import { useMemo, useState } from 'react';
-import { Activity, ArrowRight, CheckCircle2, ClipboardList, Filter, RefreshCw, Send, Users } from 'lucide-react';
-import { Link } from 'wouter';
-import { getGetPartnerRecommendationsQueryKey, useGetAdminSummary, useGetPartnerRecommendations, useListJobs, useListPartners, useUpdateJob } from '@workspace/api-client-react';
-import type { Job, JobAssessment } from '@workspace/api-client-react';
-import { AppFrame, EmptyState, SectionLabel, Skeleton, StatCard, StatusPill } from '@/components/source-ui';
-
-const statusOptions = ['all', 'new', 'reviewing', 'dispatching', 'completed'];
+import { useMemo, useState } from "react";
+import { Activity, ClipboardList, RefreshCw, Send, Users } from "lucide-react";
+import { Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getGetPartnerRecommendationsQueryKey,
+  useCreateDispatchOffer,
+  useGetAdminSummary,
+  useGetPartnerRecommendations,
+  useListJobs,
+  useListPartners,
+} from "@workspace/api-client-react";
+import type { Job, JobAssessment } from "@workspace/api-client-react";
+import {
+  AppFrame,
+  EmptyState,
+  SectionLabel,
+  Skeleton,
+  StatCard,
+  StatusPill,
+} from "@/components/source-ui";
 
 export default function AdminPage() {
-  const summaryQuery = useGetAdminSummary();
-  const jobsQuery = useListJobs();
-  const partnersQuery = useListPartners();
-  const updateJob = useUpdateJob();
-  const [filter, setFilter] = useState('all');
-  const [activeTab, setActiveTab] = useState<'requests' | 'partners'>('requests');
-  const jobs = jobsQuery.data ?? [];
-  const filteredJobs = useMemo(() => filter === 'all' ? jobs : jobs.filter((job) => job.status.toLowerCase().includes(filter)), [filter, jobs]);
-  const nav = <div className="space-y-2"><Link href="/admin" className="flex items-center gap-3 rounded-xl bg-[hsl(var(--sidebar-accent))] px-3 py-3 text-sm font-semibold" data-testid="sidebar-admin-dashboard"><Activity size={17} /> Dispatch overview</Link><Link href="/request" className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-[hsl(var(--sidebar-foreground)/.66)] hover:bg-[hsl(var(--sidebar-accent))]" data-testid="sidebar-admin-request"><ClipboardList size={17} /> New request</Link><Link href="/partner" className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-[hsl(var(--sidebar-foreground)/.66)] hover:bg-[hsl(var(--sidebar-accent))]" data-testid="sidebar-admin-partner"><Users size={17} /> Partner intake</Link></div>;
-  const refresh = () => { summaryQuery.refetch(); jobsQuery.refetch(); partnersQuery.refetch(); };
-  return <AppFrame header={nav}><div className="border-b border-[hsl(var(--border))] bg-[hsl(var(--card)/.72)]"><div className="content-wrap flex min-h-[78px] items-center justify-between gap-3"><div><p className="font-mono-ui text-[10px] uppercase tracking-[.17em] text-[hsl(var(--secondary))]">Operations / Melbourne</p><h1 className="mt-1 text-xl font-bold tracking-[-.04em] md:text-2xl">Dispatch desk</h1></div><button className="btn-quiet border border-[hsl(var(--border))] text-sm" onClick={refresh} data-testid="button-refresh-admin"><RefreshCw size={15} className={summaryQuery.isFetching ? 'animate-spin' : ''} /> Refresh</button></div></div><main className="content-wrap py-8 pb-24 md:py-10"><div className="flex items-end justify-between gap-4"><div><SectionLabel>Today’s signal</SectionLabel><h2 className="mt-2 text-4xl font-bold tracking-[-.07em]">Keep the queue moving.</h2></div><span className="hidden rounded-full bg-[hsl(var(--accent)/.18)] px-3 py-1.5 font-mono-ui text-[10px] uppercase tracking-[.1em] text-[hsl(var(--accent-foreground))] sm:inline-flex">Demo data clearly marked</span></div>{summaryQuery.isError || jobsQuery.isError ? <div className="mt-8"><EmptyState title="The dispatch feed is unavailable" detail="Try refreshing. No status is being inferred while the live feed is unavailable." action={<button className="btn-main" onClick={refresh} data-testid="button-retry-admin"><RefreshCw size={16} /> Try again</button>} /></div> : <><SummaryGrid loading={summaryQuery.isLoading} summary={summaryQuery.data} /><div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-b border-[hsl(var(--border))]"><div className="flex gap-1"><button className={`rounded-t-xl px-4 py-3 text-sm font-bold ${activeTab === 'requests' ? 'border-b-2 border-[hsl(var(--accent))] text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'}`} onClick={() => setActiveTab('requests')} data-testid="tab-admin-requests">Requests <span className="ml-1 font-mono-ui text-[10px]">{jobs.length}</span></button><button className={`rounded-t-xl px-4 py-3 text-sm font-bold ${activeTab === 'partners' ? 'border-b-2 border-[hsl(var(--accent))] text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'}`} onClick={() => setActiveTab('partners')} data-testid="tab-admin-partners">Partners <span className="ml-1 font-mono-ui text-[10px]">{partnersQuery.data?.length ?? 0}</span></button></div>{activeTab === 'requests' && <div className="flex items-center gap-2 pb-2"><Filter size={14} className="text-[hsl(var(--muted-foreground))]" /><select className="field min-h-[36px] w-auto py-1 text-xs" value={filter} onChange={(event) => setFilter(event.target.value)} data-testid="select-admin-filter">{statusOptions.map((option) => <option value={option} key={option}>{option === 'all' ? 'All request states' : option}</option>)}</select></div>}</div>{activeTab === 'requests' ? <RequestsTable jobs={filteredJobs} updateJob={updateJob} /> : <PartnersTable partners={partnersQuery.data ?? []} />}</>}</main></AppFrame>;
+  const summary = useGetAdminSummary();
+  const jobs = useListJobs();
+  const partners = useListPartners();
+  const [filter, setFilter] = useState("all");
+  const visible = useMemo(
+    () =>
+      filter === "all"
+        ? (jobs.data ?? [])
+        : (jobs.data ?? []).filter((job) => job.status === filter),
+    [filter, jobs.data],
+  );
+  const refresh = () => {
+    summary.refetch();
+    jobs.refetch();
+    partners.refetch();
+  };
+  const nav = (
+    <div className="space-y-2">
+      <Link
+        href="/admin"
+        className="flex items-center gap-3 rounded-xl bg-[hsl(var(--sidebar-accent))] px-3 py-3 text-sm font-semibold"
+      >
+        <Activity size={17} /> Dispatch overview
+      </Link>
+      <Link
+        href="/request"
+        className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm"
+      >
+        <ClipboardList size={17} /> New request
+      </Link>
+      <Link
+        href="/partner"
+        className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm"
+      >
+        <Users size={17} /> Partner intake
+      </Link>
+    </div>
+  );
+  return (
+    <AppFrame header={nav}>
+      <header className="border-b border-[hsl(var(--border))]">
+        <div className="content-wrap flex min-h-[78px] items-center justify-between">
+          <div>
+            <SectionLabel>Operations / Melbourne</SectionLabel>
+            <h1 className="mt-1 text-2xl font-bold">Dispatch desk</h1>
+          </div>
+          <button className="btn-quiet border" onClick={refresh}>
+            <RefreshCw size={15} /> Refresh
+          </button>
+        </div>
+      </header>
+      <main className="content-wrap py-10 pb-24">
+        <h2 className="text-4xl font-bold tracking-[-.07em]">
+          Human-controlled pilot dispatch.
+        </h2>
+        {summary.isLoading ? (
+          <Skeleton className="mt-8 h-32" />
+        ) : (
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Awaiting dispatch"
+              value={summary.data?.awaitingDispatch ?? 0}
+              accent
+            />
+            <StatCard
+              label="Available tradies"
+              value={summary.data?.availableTradies ?? 0}
+            />
+            <StatCard
+              label="Offers sent"
+              value={summary.data?.sentOpportunities ?? 0}
+            />
+            <StatCard
+              label="Accepted"
+              value={summary.data?.acceptedJobs ?? 0}
+            />
+          </div>
+        )}
+        <div className="mt-10 flex justify-end">
+          <select
+            className="field w-auto"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+          >
+            <option value="all">All states</option>
+            <option value="awaiting_dispatch">Awaiting dispatch</option>
+            <option value="dispatching">Offer pending</option>
+            <option value="accepted">Accepted</option>
+          </select>
+        </div>
+        {jobs.isError ? (
+          <EmptyState
+            title="Dispatch feed unavailable"
+            detail="Refresh to try again."
+          />
+        ) : (
+          <div className="mt-4 space-y-4">
+            {visible.map((job) => (
+              <JobCard key={job.id} job={job} />
+            ))}
+          </div>
+        )}
+      </main>
+    </AppFrame>
+  );
 }
 
-function SummaryGrid({ loading, summary }: { loading: boolean; summary?: { newRequests: number; awaitingDispatch: number; tradieApplications: number; approvedTradies: number; availableTradies: number; sentOpportunities: number; acceptedJobs: number; declinedJobs: number; completedJobs: number } }) {
-  if (loading) return <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Skeleton className="h-32" /><Skeleton className="h-32" /><Skeleton className="h-32" /><Skeleton className="h-32" /></div>;
-  const data = summary ?? { newRequests: 0, awaitingDispatch: 0, tradieApplications: 0, approvedTradies: 0, availableTradies: 0, sentOpportunities: 0, acceptedJobs: 0, declinedJobs: 0, completedJobs: 0 };
-  return <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><StatCard label="New requests" value={data.newRequests} detail="Need first review" accent /><StatCard label="Awaiting dispatch" value={data.awaitingDispatch} detail="Not yet offered to a tradie" /><StatCard label="Available tradies" value={data.availableTradies} detail={`${data.approvedTradies} approved total`} /><StatCard label="Accepted jobs" value={data.acceptedJobs} detail={`${data.completedJobs} completed`} /></div>;
+function JobCard({ job }: { job: Job }) {
+  return (
+    <section
+      className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5"
+      data-testid={`row-job-${job.id}`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-mono-ui text-[10px] text-[hsl(var(--secondary))]">
+            {job.reference}
+          </p>
+          <h3 className="mt-1 text-lg font-bold">{job.description}</h3>
+          <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+            {job.trade} · {job.suburb} · {job.urgency}
+          </p>
+        </div>
+        <StatusPill status={job.status} />
+      </div>
+      <Recommendation
+        jobId={job.id}
+        jobStatus={job.status}
+        assessment={job.assessment ?? undefined}
+      />
+    </section>
+  );
 }
 
-function RequestsTable({ jobs, updateJob }: { jobs: Job[]; updateJob: ReturnType<typeof useUpdateJob> }) {
-  if (!jobs.length) return <div className="mt-6"><EmptyState title="No requests in this view" detail="The queue is clear for the selected state." /></div>;
-  const advance = (job: typeof jobs[number]) => { const next = job.status.toLowerCase().includes('complete') ? 'completed' : job.status.toLowerCase().includes('dispatch') ? 'completed' : 'dispatching'; updateJob.mutate({ id: job.id, data: { status: next } }); };
-  return <div className="mt-6 overflow-hidden rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]"><div className="hidden grid-cols-[1fr_1.5fr_.8fr_.7fr_auto] gap-4 border-b border-[hsl(var(--border))] bg-[hsl(var(--muted)/.55)] px-5 py-3 font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))] md:grid"><span>Request</span><span>What’s needed</span><span>Area</span><span>State</span><span /></div><div className="divide-y divide-[hsl(var(--border))]">{jobs.map((job) => <div className="grid gap-3 px-5 py-5 md:grid-cols-[1fr_1.5fr_.8fr_.7fr_auto] md:items-center md:gap-4" key={job.id} data-testid={`row-job-${job.id}`}><div><p className="font-mono-ui text-[10px] text-[hsl(var(--secondary))]">{job.reference}</p><p className="mt-1 text-sm font-bold">{job.customerName || 'Customer'}</p></div><div><p className="text-sm font-semibold">{job.description}</p><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{job.trade} · {job.urgency}</p><AssessmentAndRecommendations jobId={job.id} assessment={job.assessment ?? undefined} /></div><p className="text-sm text-[hsl(var(--muted-foreground))]">{job.suburb}</p><div><StatusPill status={job.status} /></div><button className="btn-quiet justify-self-start border border-[hsl(var(--border))] text-xs md:justify-self-end" onClick={() => advance(job)} disabled={updateJob.isPending || job.status.toLowerCase().includes('complete')} data-testid={`button-advance-job-${job.id}`}>{job.status.toLowerCase().includes('complete') ? <CheckCircle2 size={15} /> : <Send size={15} />} {job.status.toLowerCase().includes('complete') ? 'Done' : 'Advance'}</button></div>)}</div><p className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-5 py-3 text-xs text-[hsl(var(--muted-foreground))]">Recommendations are review-only and never create dispatch offers. Advancing a request only updates job status.</p></div>;
-}
-
-function AssessmentAndRecommendations({ jobId, assessment }: { jobId: number; assessment?: JobAssessment }) {
-  const [showRecommendations, setShowRecommendations] = useState(false);
-  const recommendations = useGetPartnerRecommendations(jobId, { query: { enabled: showRecommendations, queryKey: getGetPartnerRecommendationsQueryKey(jobId) } });
-  return <div className="mt-3 space-y-2 text-xs"><div className={`rounded-lg px-3 py-2 ${assessment?.safetyCodes.length ? 'bg-[hsl(var(--destructive)/.1)] text-[hsl(var(--destructive))]' : 'bg-[hsl(var(--muted)/.55)] text-[hsl(var(--muted-foreground))]'}`}><strong>Assessment:</strong> {assessment ? `${assessment.outcome} · ${assessment.provider}${assessment.model ? ` / ${assessment.model}` : ''}` : 'Pending manual review'}{assessment?.safetyCodes.length ? ` · ${assessment.safetyCodes.join(', ')}` : ''}</div><button className="text-left font-semibold text-[hsl(var(--secondary))] underline-offset-2 hover:underline" onClick={() => setShowRecommendations((value) => !value)} data-testid={`button-recommendations-${jobId}`}>{showRecommendations ? 'Hide partner recommendations' : 'Show partner recommendations'}</button>{showRecommendations && <div className="rounded-lg border border-[hsl(var(--border))] p-3">{recommendations.isLoading ? 'Calculating deterministic recommendations…' : recommendations.isError ? 'Recommendations are unavailable.' : <div className="space-y-1">{recommendations.data?.map((item) => <p key={item.partnerId}><strong>Partner #{item.partnerId}</strong> · {item.score} · {item.eligible ? item.codes.join(', ') : item.disqualifications.join(', ')}</p>)}</div>}<p className="mt-2 text-[hsl(var(--muted-foreground))]">No offer is created from this list.</p></div>}</div>;
-}
-
-function PartnersTable({ partners }: { partners: { id: number; businessName: string; contactName: string; trade: string; suburbs: string[]; availability: boolean; status: string }[] }) {
-  if (!partners.length) return <div className="mt-6"><EmptyState title="No partner applications yet" detail="New expressions of interest will appear here for review." action={<Link href="/partner" className="btn-accent" data-testid="link-admin-partner-application">View partner intake</Link>} /></div>;
-  return <div className="mt-6 space-y-3">{partners.map((partner) => <div className="glass-card flex flex-col gap-4 rounded-2xl p-5 sm:flex-row sm:items-center sm:justify-between" key={partner.id} data-testid={`row-partner-${partner.id}`}><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold">{partner.businessName}</h3><StatusPill status={partner.status} /></div><p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">{partner.contactName} · {partner.trade}</p><p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">{partner.suburbs.join(' · ')}</p></div><div className="flex items-center gap-3 text-sm"><span className={`inline-flex items-center gap-2 ${partner.availability ? 'text-[hsl(var(--secondary))]' : 'text-[hsl(var(--muted-foreground))]'}`}><span className="status-dot" /> {partner.availability ? 'Available' : 'Offline'}</span><ArrowRight size={16} className="text-[hsl(var(--muted-foreground))]" /></div></div>)}</div>;
+function Recommendation({
+  jobId,
+  jobStatus,
+  assessment,
+}: {
+  jobId: number;
+  jobStatus: string;
+  assessment?: JobAssessment;
+}) {
+  const [open, setOpen] = useState(jobStatus === "awaiting_dispatch");
+  const [result, setResult] = useState("");
+  const queryClient = useQueryClient();
+  const recommendations = useGetPartnerRecommendations(jobId, {
+    query: {
+      enabled: open,
+      queryKey: getGetPartnerRecommendationsQueryKey(jobId),
+    },
+  });
+  const createOffer = useCreateDispatchOffer();
+  const top = recommendations.data?.find((item) => item.eligible);
+  const send = () =>
+    top &&
+    createOffer.mutate(
+      {
+        data: {
+          jobId,
+          partnerId: top.partnerId,
+          expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        },
+      },
+      {
+        onSuccess: (offer) => {
+          setResult(
+            `Offer created · notification ${offer.notificationStatus ?? "pending"}`,
+          );
+          queryClient.invalidateQueries();
+        },
+        onError: () => setResult("Offer was not sent. Review and try again."),
+      },
+    );
+  return (
+    <div className="mt-4 text-xs">
+      <p className="rounded-lg bg-[hsl(var(--muted)/.55)] px-3 py-2">
+        <strong>Assessment:</strong>{" "}
+        {assessment
+          ? `${assessment.outcome} · ${assessment.provider}`
+          : "Manual review"}
+      </p>
+      <button
+        className="mt-2 font-semibold text-[hsl(var(--secondary))]"
+        onClick={() => setOpen(!open)}
+        data-testid={`button-recommendations-${jobId}`}
+      >
+        {open ? "Hide recommendations" : "Show recommendations"}
+      </button>
+      {open && (
+        <div className="mt-2 rounded-xl border p-3">
+          {recommendations.isLoading
+            ? "Ranking eligible tradies…"
+            : recommendations.data?.map((item, index) => (
+                <p className="py-1" key={item.partnerId}>
+                  <strong>
+                    {index === 0 ? "Top · " : ""}Partner #{item.partnerId}
+                  </strong>{" "}
+                  · score {item.score} ·{" "}
+                  {item.eligible
+                    ? item.codes.join(", ")
+                    : item.disqualifications.join(", ")}
+                </p>
+              ))}
+          {top && jobStatus === "awaiting_dispatch" && (
+            <button
+              className="btn-accent mt-3"
+              onClick={send}
+              disabled={createOffer.isPending}
+              data-testid={`button-send-offer-${jobId}`}
+            >
+              <Send size={15} /> Send Offer to Partner #{top.partnerId}
+            </button>
+          )}
+          {!top && !recommendations.isLoading && (
+            <p className="mt-2">No eligible recommendation is ready.</p>
+          )}
+          {result && <p className="mt-3 font-semibold">{result}</p>}
+          <p className="mt-3 text-[hsl(var(--muted-foreground))]">
+            Declines and expiries return here. No next offer is created
+            automatically.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }

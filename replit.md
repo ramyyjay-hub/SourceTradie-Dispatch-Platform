@@ -17,6 +17,8 @@ SourceTradie helps Melbourne homeowners describe a problem, qualify the request 
 Required environment variables:
 
 - `DATABASE_URL` — Postgres connection string (required by API and DB tooling)
+- `RESEND_API_KEY` — Resend API key for the Phase 5 pilot email channel
+- `NOTIFICATION_FROM_EMAIL` — verified sender address used for pilot notifications
 - API runtime: `PORT=8080`
 - Web runtime: `PORT=24974`, `BASE_PATH=/`
 - Optional for local development: `API_PROXY_TARGET=http://127.0.0.1:8080`

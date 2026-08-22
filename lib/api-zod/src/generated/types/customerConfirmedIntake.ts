@@ -18,4 +18,7 @@ export interface CustomerConfirmedIntake {
   customerPhone?: string | null;
   /** @nullable */
   customerEmail?: string | null;
+  serviceAddressLine1: string;
+  /** @nullable */
+  serviceAddressLine2?: string | null;
 }

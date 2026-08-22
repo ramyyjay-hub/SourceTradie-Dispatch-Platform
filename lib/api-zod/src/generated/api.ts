@@ -88,6 +88,8 @@ export const ListJobsResponse = zod.array(ListJobsResponseItem)
  */
 export const createJobBodyDescriptionMin = 4;
 
+export const createJobBodyServiceAddressLine1Min = 3;
+
 
 
 export const CreateJobBody = zod.object({
@@ -100,6 +102,8 @@ export const CreateJobBody = zod.object({
   "customerName": zod.string(),
   "customerPhone": zod.string().optional(),
   "customerEmail": zod.string().optional(),
+  "serviceAddressLine1": zod.string().min(createJobBodyServiceAddressLine1Min),
+  "serviceAddressLine2": zod.string().optional(),
   "images": zod.array(zod.string()).optional()
 })
 
@@ -162,7 +166,9 @@ export const GetJobResponse = zod.object({
   "preferredTime": zod.string(),
   "customerName": zod.string(),
   "customerPhone": zod.string().nullish(),
-  "customerEmail": zod.string().nullish()
+  "customerEmail": zod.string().nullish(),
+  "serviceAddressLine1": zod.string(),
+  "serviceAddressLine2": zod.string().nullish()
 }),
   "assessment": zod.union([zod.object({
   "outcome": zod.string(),
@@ -187,7 +193,12 @@ export const GetJobResponse = zod.object({
   "codes": zod.array(zod.enum(['ROUTING_REVIEW', 'URGENCY_REVIEW', 'MANUAL_REVIEW_REQUIRED'])).max(getJobResponseAssessmentOneAssessmentCodesMax)
 }),
   "createdAt": zod.string()
-}),zod.null()]).optional()
+}),zod.null()]).optional(),
+  "acceptedTradie": zod.union([zod.object({
+  "businessName": zod.string(),
+  "contactName": zod.string(),
+  "eta": zod.string().nullable()
+}),zod.null()])
 })
 
 
@@ -287,6 +298,8 @@ export const correctJobIntakeBodyDescriptionMin = 4;
 
 
 
+export const correctJobIntakeBodyServiceAddressLine1Min = 3;
+
 
 
 export const CorrectJobIntakeBody = zod.object({
@@ -298,7 +311,9 @@ export const CorrectJobIntakeBody = zod.object({
   "preferredTime": zod.string().min(1),
   "customerName": zod.string().min(1),
   "customerPhone": zod.string().optional(),
-  "customerEmail": zod.string().optional()
+  "customerEmail": zod.string().optional(),
+  "serviceAddressLine1": zod.string().min(correctJobIntakeBodyServiceAddressLine1Min),
+  "serviceAddressLine2": zod.string().optional()
 })
 
 export const correctJobIntakeResponseAssessmentOneAssessmentSuburbMax = 120;
@@ -335,7 +350,9 @@ export const CorrectJobIntakeResponse = zod.object({
   "preferredTime": zod.string(),
   "customerName": zod.string(),
   "customerPhone": zod.string().nullish(),
-  "customerEmail": zod.string().nullish()
+  "customerEmail": zod.string().nullish(),
+  "serviceAddressLine1": zod.string(),
+  "serviceAddressLine2": zod.string().nullish()
 }),
   "assessment": zod.union([zod.object({
   "outcome": zod.string(),
@@ -360,7 +377,12 @@ export const CorrectJobIntakeResponse = zod.object({
   "codes": zod.array(zod.enum(['ROUTING_REVIEW', 'URGENCY_REVIEW', 'MANUAL_REVIEW_REQUIRED'])).max(correctJobIntakeResponseAssessmentOneAssessmentCodesMax)
 }),
   "createdAt": zod.string()
-}),zod.null()]).optional()
+}),zod.null()]).optional(),
+  "acceptedTradie": zod.union([zod.object({
+  "businessName": zod.string(),
+  "contactName": zod.string(),
+  "eta": zod.string().nullable()
+}),zod.null()])
 })
 
 
@@ -448,8 +470,13 @@ export const DecideDispatchParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const decideDispatchBodyEtaMax = 160;
+
+
+
 export const DecideDispatchBody = zod.object({
-  "decision": zod.string()
+  "decision": zod.string(),
+  "eta": zod.string().max(decideDispatchBodyEtaMax).optional()
 })
 
 export const DecideDispatchResponse = zod.object({
@@ -458,7 +485,8 @@ export const DecideDispatchResponse = zod.object({
   "businessId": zod.number(),
   "decision": zod.string(),
   "offeredAt": zod.string().optional(),
-  "respondedAt": zod.string().nullish()
+  "respondedAt": zod.string().nullish(),
+  "eta": zod.string().nullish()
 })
 
 
@@ -594,7 +622,9 @@ export const ListDispatchOffersResponseItem = zod.object({
   "state": zod.string(),
   "offeredAt": zod.string(),
   "respondedAt": zod.string().nullish(),
-  "expiresAt": zod.string().nullish()
+  "expiresAt": zod.string().nullish(),
+  "eta": zod.string().nullish(),
+  "notificationStatus": zod.enum(['pending', 'sent', 'delivered', 'failed']).optional()
 })
 export const ListDispatchOffersResponse = zod.array(ListDispatchOffersResponseItem)
 
@@ -615,7 +645,9 @@ export const CreateDispatchOfferResponse = zod.object({
   "state": zod.string(),
   "offeredAt": zod.string(),
   "respondedAt": zod.string().nullish(),
-  "expiresAt": zod.string().nullish()
+  "expiresAt": zod.string().nullish(),
+  "eta": zod.string().nullish(),
+  "notificationStatus": zod.enum(['pending', 'sent', 'delivered', 'failed']).optional()
 })
 
 
@@ -629,7 +661,9 @@ export const ListPartnerOffersResponseItem = zod.object({
   "state": zod.string(),
   "offeredAt": zod.string(),
   "respondedAt": zod.string().nullish(),
-  "expiresAt": zod.string().nullish()
+  "expiresAt": zod.string().nullish(),
+  "eta": zod.string().nullish(),
+  "notificationStatus": zod.enum(['pending', 'sent', 'delivered', 'failed']).optional()
 }).and(zod.object({
   "job": zod.object({
   "reference": zod.string(),
@@ -642,6 +676,8 @@ export const ListPartnerOffersResponseItem = zod.object({
   "customerName": zod.string().nullish(),
   "customerPhone": zod.string().nullish(),
   "customerEmail": zod.string().nullish(),
+  "serviceAddressLine1": zod.string().nullish(),
+  "serviceAddressLine2": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 }).optional()
@@ -662,7 +698,8 @@ export const ExpireDispatchOfferResponse = zod.object({
   "businessId": zod.number(),
   "decision": zod.string(),
   "offeredAt": zod.string().optional(),
-  "respondedAt": zod.string().nullish()
+  "respondedAt": zod.string().nullish(),
+  "eta": zod.string().nullish()
 })
 
 

@@ -411,7 +411,20 @@ components:
 
     Job:
       type: object
-      required: [id, reference, description, trade, suburb, postcode, urgency, preferredTime, status, createdAt, assessment]
+      required:
+        [
+          id,
+          reference,
+          description,
+          trade,
+          suburb,
+          postcode,
+          urgency,
+          preferredTime,
+          status,
+          createdAt,
+          assessment,
+        ]
       properties:
         id: { type: number }
         reference: { type: string }
@@ -436,7 +449,8 @@ components:
 
     CreateJobResponse:
       type: object
-      required: [id, reference, status, createdAt, statusAccessToken, statusAccessUrl]
+      required:
+        [id, reference, status, createdAt, statusAccessToken, statusAccessUrl]
       properties:
         id: { type: number }
         reference: { type: string }
@@ -447,7 +461,8 @@ components:
 
     PublicJobStatus:
       type: object
-      required: [reference, status, createdAt, updatedAt, intake]
+      required:
+        [reference, status, createdAt, updatedAt, intake, acceptedTradie]
       properties:
         reference: { type: string }
         status: { type: string }
@@ -459,10 +474,24 @@ components:
           anyOf:
             - $ref: "#/components/schemas/JobAssessment"
             - type: "null"
+        acceptedTradie:
+          anyOf:
+            - $ref: "#/components/schemas/AcceptedTradie"
+            - type: "null"
 
     JobInput:
       type: object
-      required: [description, trade, suburb, postcode, urgency, preferredTime, customerName]
+      required:
+        [
+          description,
+          trade,
+          suburb,
+          postcode,
+          urgency,
+          preferredTime,
+          customerName,
+          serviceAddressLine1,
+        ]
       properties:
         description: { type: string, minLength: 4 }
         trade: { type: string }
@@ -473,6 +502,8 @@ components:
         customerName: { type: string }
         customerPhone: { type: string }
         customerEmail: { type: string }
+        serviceAddressLine1: { type: string, minLength: 3 }
+        serviceAddressLine2: { type: string }
         images:
           type: array
           items: { type: string }
@@ -484,7 +515,17 @@ components:
 
     JobIntakeCorrection:
       type: object
-      required: [description, trade, suburb, postcode, urgency, preferredTime, customerName]
+      required:
+        [
+          description,
+          trade,
+          suburb,
+          postcode,
+          urgency,
+          preferredTime,
+          customerName,
+          serviceAddressLine1,
+        ]
       properties:
         description: { type: string, minLength: 4 }
         trade: { type: string, minLength: 1 }
@@ -495,10 +536,22 @@ components:
         customerName: { type: string, minLength: 1 }
         customerPhone: { type: string }
         customerEmail: { type: string }
+        serviceAddressLine1: { type: string, minLength: 3 }
+        serviceAddressLine2: { type: string }
 
     CustomerConfirmedIntake:
       type: object
-      required: [description, trade, suburb, postcode, urgency, preferredTime, customerName]
+      required:
+        [
+          description,
+          trade,
+          suburb,
+          postcode,
+          urgency,
+          preferredTime,
+          customerName,
+          serviceAddressLine1,
+        ]
       properties:
         description: { type: string }
         trade: { type: string }
@@ -509,6 +562,8 @@ components:
         customerName: { type: string }
         customerPhone: { type: ["string", "null"] }
         customerEmail: { type: ["string", "null"] }
+        serviceAddressLine1: { type: string }
+        serviceAddressLine2: { type: ["string", "null"] }
 
     JobAssessment:
       type: object
@@ -582,7 +637,8 @@ components:
 
     Partner:
       type: object
-      required: [id, businessName, contactName, trade, suburbs, availability, status]
+      required:
+        [id, businessName, contactName, trade, suburbs, availability, status]
       properties:
         id: { type: number }
         businessName: { type: string }
@@ -602,7 +658,8 @@ components:
 
     PartnerInput:
       type: object
-      required: [businessName, contactName, trade, mobile, email, suburbs, radiusKm]
+      required:
+        [businessName, contactName, trade, mobile, email, suburbs, radiusKm]
       properties:
         businessName: { type: string }
         contactName: { type: string }
@@ -636,12 +693,14 @@ components:
         decision: { type: string }
         offeredAt: { type: string }
         respondedAt: { type: ["string", "null"] }
+        eta: { type: ["string", "null"] }
 
     DispatchDecisionInput:
       type: object
       required: [decision]
       properties:
         decision: { type: string }
+        eta: { type: string, maxLength: 160 }
 
     DispatchOfferInput:
       type: object
@@ -662,6 +721,9 @@ components:
         offeredAt: { type: string }
         respondedAt: { type: ["string", "null"] }
         expiresAt: { type: ["string", "null"] }
+        eta: { type: ["string", "null"] }
+        notificationStatus:
+          { type: string, enum: [pending, sent, delivered, failed] }
 
     PartnerOffer:
       allOf:
@@ -673,7 +735,18 @@ components:
 
     PartnerOfferJob:
       type: object
-      required: [reference, trade, suburb, postcode, urgency, preferredTime, description, createdAt, updatedAt]
+      required:
+        [
+          reference,
+          trade,
+          suburb,
+          postcode,
+          urgency,
+          preferredTime,
+          description,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         reference: { type: string }
         trade: { type: string }
@@ -685,6 +758,8 @@ components:
         customerName: { type: ["string", "null"] }
         customerPhone: { type: ["string", "null"] }
         customerEmail: { type: ["string", "null"] }
+        serviceAddressLine1: { type: ["string", "null"] }
+        serviceAddressLine2: { type: ["string", "null"] }
         createdAt: { type: string }
         updatedAt: { type: string }
 
@@ -702,9 +777,28 @@ components:
           type: array
           items: { type: string }
 
+    AcceptedTradie:
+      type: object
+      required: [businessName, contactName, eta]
+      properties:
+        businessName: { type: string }
+        contactName: { type: string }
+        eta: { type: ["string", "null"] }
+
     AdminSummary:
       type: object
-      required: [newRequests, awaitingDispatch, tradieApplications, approvedTradies, availableTradies, sentOpportunities, acceptedJobs, declinedJobs, completedJobs]
+      required:
+        [
+          newRequests,
+          awaitingDispatch,
+          tradieApplications,
+          approvedTradies,
+          availableTradies,
+          sentOpportunities,
+          acceptedJobs,
+          declinedJobs,
+          completedJobs,
+        ]
       properties:
         newRequests: { type: number }
         awaitingDispatch: { type: number }

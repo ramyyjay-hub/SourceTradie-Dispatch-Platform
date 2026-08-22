@@ -15,6 +15,7 @@ async function createTestApi() {
     "0001_phase2_auth_rbac.sql",
     "0002_phase3_dispatch_lifecycle.sql",
     "0003_phase4_safe_intake_ai.sql",
+    "0004_phase5_pilot_notifications.sql",
   ].map((file) =>
     path.resolve(import.meta.dirname, "../../../../lib/db/migrations", file),
   );
@@ -63,6 +64,7 @@ describe("public job status route", () => {
           urgency: "Soon",
           preferredTime: "This afternoon",
           customerName: "Alex Morgan",
+          serviceAddressLine1: "12 Example Street",
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -74,7 +76,9 @@ describe("public job status route", () => {
 
       const statusUrl = new URL(created.statusAccessUrl, api.baseUrl);
       expect(statusUrl.pathname).toBe(`/request/${created.id}`);
-      expect(statusUrl.searchParams.get("token")).toBe(created.statusAccessToken);
+      expect(statusUrl.searchParams.get("token")).toBe(
+        created.statusAccessToken,
+      );
 
       const statusResponse = await fetch(
         `${api.baseUrl}/api/jobs/${created.id}${statusUrl.search}`,

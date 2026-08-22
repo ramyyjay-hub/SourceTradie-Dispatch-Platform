@@ -149,6 +149,16 @@ export interface CustomerConfirmedIntake {
   customerPhone?: string | null;
   /** @nullable */
   customerEmail?: string | null;
+  serviceAddressLine1: string;
+  /** @nullable */
+  serviceAddressLine2?: string | null;
+}
+
+export interface AcceptedTradie {
+  businessName: string;
+  contactName: string;
+  /** @nullable */
+  eta: string | null;
 }
 
 export interface PublicJobStatus {
@@ -158,6 +168,7 @@ export interface PublicJobStatus {
   updatedAt: string;
   intake: CustomerConfirmedIntake;
   assessment?: JobAssessment | null;
+  acceptedTradie: AcceptedTradie | null;
 }
 
 export interface JobInput {
@@ -171,6 +182,9 @@ export interface JobInput {
   customerName: string;
   customerPhone?: string;
   customerEmail?: string;
+  /** @minLength 3 */
+  serviceAddressLine1: string;
+  serviceAddressLine2?: string;
   images?: string[];
 }
 
@@ -195,6 +209,9 @@ export interface JobIntakeCorrection {
   customerName: string;
   customerPhone?: string;
   customerEmail?: string;
+  /** @minLength 3 */
+  serviceAddressLine1: string;
+  serviceAddressLine2?: string;
 }
 
 export interface Partner {
@@ -238,10 +255,14 @@ export interface Dispatch {
   offeredAt?: string;
   /** @nullable */
   respondedAt?: string | null;
+  /** @nullable */
+  eta?: string | null;
 }
 
 export interface DispatchDecisionInput {
   decision: string;
+  /** @maxLength 160 */
+  eta?: string;
 }
 
 export interface DispatchOfferInput {
@@ -249,6 +270,16 @@ export interface DispatchOfferInput {
   partnerId: number;
   expiresAt: string;
 }
+
+export type DispatchOfferNotificationStatus = typeof DispatchOfferNotificationStatus[keyof typeof DispatchOfferNotificationStatus];
+
+
+export const DispatchOfferNotificationStatus = {
+  pending: 'pending',
+  sent: 'sent',
+  delivered: 'delivered',
+  failed: 'failed',
+} as const;
 
 export interface DispatchOffer {
   id: number;
@@ -260,6 +291,9 @@ export interface DispatchOffer {
   respondedAt?: string | null;
   /** @nullable */
   expiresAt?: string | null;
+  /** @nullable */
+  eta?: string | null;
+  notificationStatus?: DispatchOfferNotificationStatus;
 }
 
 export interface PartnerOfferJob {
@@ -276,6 +310,10 @@ export interface PartnerOfferJob {
   customerPhone?: string | null;
   /** @nullable */
   customerEmail?: string | null;
+  /** @nullable */
+  serviceAddressLine1?: string | null;
+  /** @nullable */
+  serviceAddressLine2?: string | null;
   createdAt: string;
   updatedAt: string;
 }

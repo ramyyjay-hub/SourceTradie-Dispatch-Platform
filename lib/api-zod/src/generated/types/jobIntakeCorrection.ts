@@ -23,4 +23,7 @@ export interface JobIntakeCorrection {
   customerName: string;
   customerPhone?: string;
   customerEmail?: string;
+  /** @minLength 3 */
+  serviceAddressLine1: string;
+  serviceAddressLine2?: string;
 }

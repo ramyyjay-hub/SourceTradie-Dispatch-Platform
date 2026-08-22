@@ -14,4 +14,6 @@ export interface Dispatch {
   offeredAt?: string;
   /** @nullable */
   respondedAt?: string | null;
+  /** @nullable */
+  eta?: string | null;
 }

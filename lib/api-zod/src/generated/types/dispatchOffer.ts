@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { DispatchOfferNotificationStatus } from './dispatchOfferNotificationStatus';
 
 export interface DispatchOffer {
   id: number;
@@ -16,4 +17,7 @@ export interface DispatchOffer {
   respondedAt?: string | null;
   /** @nullable */
   expiresAt?: string | null;
+  /** @nullable */
+  eta?: string | null;
+  notificationStatus?: DispatchOfferNotificationStatus;
 }

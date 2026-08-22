@@ -20,6 +20,10 @@ export interface PartnerOfferJob {
   customerPhone?: string | null;
   /** @nullable */
   customerEmail?: string | null;
+  /** @nullable */
+  serviceAddressLine1?: string | null;
+  /** @nullable */
+  serviceAddressLine2?: string | null;
   createdAt: string;
   updatedAt: string;
 }
