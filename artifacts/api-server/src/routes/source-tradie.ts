@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { z } from "zod";
 import {
   CreateJobBody,
   CreatePartnerBody,
@@ -19,6 +20,16 @@ import {
 } from "../middlewares/authorize";
 
 type DbLike = typeof WorkspaceDb;
+
+const CreateDispatchOfferBody = z.object({
+  jobId: z.coerce.number().int().positive(),
+  partnerId: z.coerce.number().int().positive(),
+  expiresAt: z.coerce.date(),
+});
+
+const DispatchOfferIdParams = z.object({
+  id: z.coerce.number().int().positive(),
+});
 
 export function createSourceTradieRouter(database: DbLike): IRouter {
   const router: IRouter = Router();
@@ -65,6 +76,65 @@ router.get("/jobs", authRequired, requireAdmin, async (_req, res) => {
   const jobs = await repository.listJobs();
   res.json(jobs);
 });
+
+router.get(
+  "/admin/jobs-awaiting-dispatch",
+  authRequired,
+  requireAdmin,
+  async (_req, res) => {
+    res.json(await repository.listJobsAwaitingDispatch());
+  },
+);
+
+router.get(
+  "/admin/approved-partners",
+  authRequired,
+  requireAdmin,
+  async (req, res) => {
+    const trade = typeof req.query.trade === "string" ? req.query.trade : undefined;
+    res.json(await repository.listApprovedPartners(trade));
+  },
+);
+
+router.post(
+  "/admin/dispatch-offers",
+  authRequired,
+  requireAdmin,
+  async (req, res) => {
+    const parsed = CreateDispatchOfferBody.safeParse(req.body);
+    if (!parsed.success || parsed.data.expiresAt.getTime() <= Date.now()) {
+      return res.status(400).json({ error: "A future offer expiry is required." });
+    }
+
+    const result = await repository.createDispatchOffer(parsed.data);
+    if (result.kind === "not_found") {
+      return res.status(404).json({ error: "Job or partner not found." });
+    }
+    if (result.kind === "invalid_job_state") {
+      return res.status(409).json({ error: "This job is not awaiting dispatch." });
+    }
+    if (result.kind === "active_offer_exists") {
+      return res.status(409).json({ error: "This job already has an active offer." });
+    }
+    return res.status(201).json(result.offer);
+  },
+);
+
+router.get(
+  "/admin/dispatch-offers",
+  authRequired,
+  requireAdmin,
+  async (req, res) => {
+    const jobId = typeof req.query.jobId === "string" ? Number(req.query.jobId) : undefined;
+    const partnerId = typeof req.query.partnerId === "string" ? Number(req.query.partnerId) : undefined;
+    const state = typeof req.query.state === "string" ? req.query.state : undefined;
+    res.json(await repository.listDispatchOffers({
+      jobId: Number.isFinite(jobId) ? jobId : undefined,
+      partnerId: Number.isFinite(partnerId) ? partnerId : undefined,
+      state: state as never,
+    }));
+  },
+);
 
 router.patch("/jobs/:id", authRequired, requireAdmin, async (req, res) => {
   const params = UpdateJobParams.safeParse(req.params);
@@ -195,6 +265,42 @@ router.patch(
       });
     }
 
+    return res.json(result.dispatch);
+  },
+);
+
+router.get(
+  "/partner/offers",
+  authRequired,
+  requirePartnerOrAdmin,
+  async (req, res) => {
+    const principal = req.auth!.principal;
+    if (!principal.partnerId) {
+      return res.status(403).json({ error: "No partner profile is linked to this account." });
+    }
+    return res.json(await repository.listPartnerOffers(principal.partnerId));
+  },
+);
+
+router.patch(
+  "/admin/dispatch-offers/:id/expire",
+  authRequired,
+  requireAdmin,
+  async (req, res) => {
+    const parsed = DispatchOfferIdParams.safeParse(req.params);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid dispatch offer identifier." });
+    }
+
+    const result = await repository.expireDispatchOffer(parsed.data.id);
+    if (result.kind === "not_found") {
+      return res.status(404).json({ error: "Dispatch offer not found." });
+    }
+    if (result.kind === "invalid_transition") {
+      return res.status(409).json({
+        error: `Invalid dispatch transition from ${result.from} to ${result.to}.`,
+      });
+    }
     return res.json(result.dispatch);
   },
 );

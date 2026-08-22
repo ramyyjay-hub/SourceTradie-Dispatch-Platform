@@ -109,6 +109,46 @@ export interface DispatchDecisionInput {
   decision: string;
 }
 
+export interface DispatchOfferInput {
+  jobId: number;
+  partnerId: number;
+  expiresAt: string;
+}
+
+export interface DispatchOffer {
+  id: number;
+  jobId: number;
+  partnerId: number;
+  state: string;
+  offeredAt: string;
+  /** @nullable */
+  respondedAt?: string | null;
+  /** @nullable */
+  expiresAt?: string | null;
+}
+
+export interface PartnerOfferJob {
+  reference: string;
+  trade: string;
+  suburb: string;
+  postcode: string;
+  urgency: string;
+  preferredTime: string;
+  description: string;
+  /** @nullable */
+  customerName?: string | null;
+  /** @nullable */
+  customerPhone?: string | null;
+  /** @nullable */
+  customerEmail?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PartnerOffer = DispatchOffer & {
+  job?: PartnerOfferJob;
+};
+
 export interface AdminSummary {
   newRequests: number;
   awaitingDispatch: number;
@@ -128,5 +168,9 @@ export type GetJobParams = {
  * @minLength 16
  */
 token: JobStatusTokenParameter;
+};
+
+export type ListApprovedPartnersParams = {
+trade?: string;
 };
 

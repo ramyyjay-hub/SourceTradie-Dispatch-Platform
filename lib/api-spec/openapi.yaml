@@ -225,6 +225,114 @@ paths:
         "403":
           description: Forbidden
 
+  /admin/jobs-awaiting-dispatch:
+    get:
+      operationId: listJobsAwaitingDispatch
+      tags: [admin]
+      summary: List jobs awaiting dispatch
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Jobs awaiting dispatch
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Job"
+
+  /admin/approved-partners:
+    get:
+      operationId: listApprovedPartners
+      tags: [admin]
+      summary: List approved partners eligible for dispatch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: trade
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Approved partners
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Partner"
+
+  /admin/dispatch-offers:
+    get:
+      operationId: listDispatchOffers
+      tags: [admin]
+      summary: List dispatch offer history
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dispatch offers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DispatchOffer"
+    post:
+      operationId: createDispatchOffer
+      tags: [admin]
+      summary: Create a dispatch offer
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DispatchOfferInput"
+      responses:
+        "201":
+          description: Dispatch offer created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DispatchOffer"
+
+  /partner/offers:
+    get:
+      operationId: listPartnerOffers
+      tags: [partners]
+      summary: List offers for the authenticated partner
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Partner opportunities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PartnerOffer"
+
+  /admin/dispatch-offers/{id}/expire:
+    patch:
+      operationId: expireDispatchOffer
+      tags: [admin]
+      summary: Expire a pending dispatch offer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Expired dispatch offer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dispatch"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -381,6 +489,51 @@ components:
       required: [decision]
       properties:
         decision: { type: string }
+
+    DispatchOfferInput:
+      type: object
+      required: [jobId, partnerId, expiresAt]
+      properties:
+        jobId: { type: number }
+        partnerId: { type: number }
+        expiresAt: { type: string, format: date-time }
+
+    DispatchOffer:
+      type: object
+      required: [id, jobId, partnerId, state, offeredAt]
+      properties:
+        id: { type: number }
+        jobId: { type: number }
+        partnerId: { type: number }
+        state: { type: string }
+        offeredAt: { type: string }
+        respondedAt: { type: ["string", "null"] }
+        expiresAt: { type: ["string", "null"] }
+
+    PartnerOffer:
+      allOf:
+        - $ref: "#/components/schemas/DispatchOffer"
+        - type: object
+          properties:
+            job:
+              $ref: "#/components/schemas/PartnerOfferJob"
+
+    PartnerOfferJob:
+      type: object
+      required: [reference, trade, suburb, postcode, urgency, preferredTime, description, createdAt, updatedAt]
+      properties:
+        reference: { type: string }
+        trade: { type: string }
+        suburb: { type: string }
+        postcode: { type: string }
+        urgency: { type: string }
+        preferredTime: { type: string }
+        description: { type: string }
+        customerName: { type: ["string", "null"] }
+        customerPhone: { type: ["string", "null"] }
+        customerEmail: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
 
     AdminSummary:
       type: object

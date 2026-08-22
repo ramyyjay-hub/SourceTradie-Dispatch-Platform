@@ -235,3 +235,130 @@ export const GetAdminSummaryResponse = zod.object({
 })
 
 
+/**
+ * @summary List jobs awaiting dispatch
+ */
+export const ListJobsAwaitingDispatchResponseItem = zod.object({
+  "id": zod.number(),
+  "reference": zod.string(),
+  "description": zod.string(),
+  "trade": zod.string(),
+  "suburb": zod.string(),
+  "postcode": zod.string(),
+  "urgency": zod.string(),
+  "preferredTime": zod.string(),
+  "status": zod.string(),
+  "customerName": zod.string().optional(),
+  "customerPhone": zod.string().nullish(),
+  "customerEmail": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "images": zod.array(zod.string()).optional()
+})
+export const ListJobsAwaitingDispatchResponse = zod.array(ListJobsAwaitingDispatchResponseItem)
+
+
+/**
+ * @summary List approved partners eligible for dispatch
+ */
+export const ListApprovedPartnersQueryParams = zod.object({
+  "trade": zod.coerce.string().optional()
+})
+
+export const ListApprovedPartnersResponseItem = zod.object({
+  "id": zod.number(),
+  "businessName": zod.string(),
+  "contactName": zod.string(),
+  "abn": zod.string().nullish(),
+  "trade": zod.string(),
+  "suburbs": zod.array(zod.string()),
+  "radiusKm": zod.number().optional(),
+  "availability": zod.boolean(),
+  "status": zod.string(),
+  "services": zod.array(zod.string()).optional(),
+  "emergencyJobs": zod.boolean().optional()
+})
+export const ListApprovedPartnersResponse = zod.array(ListApprovedPartnersResponseItem)
+
+
+/**
+ * @summary List dispatch offer history
+ */
+export const ListDispatchOffersResponseItem = zod.object({
+  "id": zod.number(),
+  "jobId": zod.number(),
+  "partnerId": zod.number(),
+  "state": zod.string(),
+  "offeredAt": zod.string(),
+  "respondedAt": zod.string().nullish(),
+  "expiresAt": zod.string().nullish()
+})
+export const ListDispatchOffersResponse = zod.array(ListDispatchOffersResponseItem)
+
+
+/**
+ * @summary Create a dispatch offer
+ */
+export const CreateDispatchOfferBody = zod.object({
+  "jobId": zod.number(),
+  "partnerId": zod.number(),
+  "expiresAt": zod.coerce.date()
+})
+
+export const CreateDispatchOfferResponse = zod.object({
+  "id": zod.number(),
+  "jobId": zod.number(),
+  "partnerId": zod.number(),
+  "state": zod.string(),
+  "offeredAt": zod.string(),
+  "respondedAt": zod.string().nullish(),
+  "expiresAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary List offers for the authenticated partner
+ */
+export const ListPartnerOffersResponseItem = zod.object({
+  "id": zod.number(),
+  "jobId": zod.number(),
+  "partnerId": zod.number(),
+  "state": zod.string(),
+  "offeredAt": zod.string(),
+  "respondedAt": zod.string().nullish(),
+  "expiresAt": zod.string().nullish()
+}).and(zod.object({
+  "job": zod.object({
+  "reference": zod.string(),
+  "trade": zod.string(),
+  "suburb": zod.string(),
+  "postcode": zod.string(),
+  "urgency": zod.string(),
+  "preferredTime": zod.string(),
+  "description": zod.string(),
+  "customerName": zod.string().nullish(),
+  "customerPhone": zod.string().nullish(),
+  "customerEmail": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+}).optional()
+}))
+export const ListPartnerOffersResponse = zod.array(ListPartnerOffersResponseItem)
+
+
+/**
+ * @summary Expire a pending dispatch offer
+ */
+export const ExpireDispatchOfferParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ExpireDispatchOfferResponse = zod.object({
+  "id": zod.number(),
+  "jobId": zod.number(),
+  "businessId": zod.number(),
+  "decision": zod.string(),
+  "offeredAt": zod.string().optional(),
+  "respondedAt": zod.string().nullish()
+})
+
+

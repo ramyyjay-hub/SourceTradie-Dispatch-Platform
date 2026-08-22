@@ -10,6 +10,7 @@ import {
 	uuid,
 	varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const jobStatusEnum = pgEnum("job_status", [
 	"new",
@@ -216,6 +217,7 @@ export const dispatchOffersTable = pgTable(
 			.defaultNow()
 			.notNull(),
 		respondedAt: timestamp("responded_at", { withTimezone: true }),
+		expiresAt: timestamp("expires_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.defaultNow()
 			.notNull(),
@@ -227,15 +229,8 @@ export const dispatchOffersTable = pgTable(
 		index("dispatch_offers_job_id_idx").on(table.jobId),
 		index("dispatch_offers_partner_id_idx").on(table.partnerId),
 		index("dispatch_offers_state_idx").on(table.state),
+		uniqueIndex("dispatch_offers_one_active_per_job_uidx")
+			.on(table.jobId)
+			.where(sql`state IN ('pending', 'accepted')`),
 	],
 );
-
-export type JobStatus = (typeof jobStatusEnum.enumValues)[number];
-export type PartnerStatus = (typeof partnerStatusEnum.enumValues)[number];
-export type DispatchState = (typeof dispatchStateEnum.enumValues)[number];
-export type AppRole = (typeof appRoleEnum.enumValues)[number];
-
-export type JobRecord = typeof jobsTable.$inferSelect;
-export type PartnerRecord = typeof partnersTable.$inferSelect;
-export type DispatchOfferRecord = typeof dispatchOffersTable.$inferSelect;
-export type AppUserRecord = typeof appUsersTable.$inferSelect;

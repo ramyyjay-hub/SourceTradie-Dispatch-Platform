@@ -464,6 +464,180 @@ export class SourceTradieRepository {
     return all.filter((partner) => partner.id === partnerId);
   }
 
+  async listJobsAwaitingDispatch(): Promise<JobApi[]> {
+    const rows = await this.database
+      .select()
+      .from(jobsTable)
+      .where(eq(jobsTable.status, "awaiting_dispatch"))
+      .orderBy(desc(jobsTable.createdAt));
+
+    const imagesByJobId = await this.getJobImages(rows.map((row) => row.id));
+    return rows.map((row) => this.toJobApi(row, imagesByJobId.get(row.id) ?? []));
+  }
+
+  async listApprovedPartners(trade?: string): Promise<PartnerApi[]> {
+    const partnerRows = await this.database
+      .select()
+      .from(partnersTable)
+      .where(
+        trade
+          ? and(eq(partnersTable.status, "approved"), eq(partnersTable.trade, trade))
+          : eq(partnersTable.status, "approved"),
+      )
+      .orderBy(desc(partnersTable.createdAt));
+
+    const partnerIds = partnerRows.map((partner) => partner.id);
+
+    const areas = partnerIds.length
+      ? await this.database
+          .select()
+          .from(partnerServiceAreasTable)
+          .where(inArray(partnerServiceAreasTable.partnerId, partnerIds))
+      : [];
+
+    const services = partnerIds.length
+      ? await this.database
+          .select()
+          .from(partnerServicesTable)
+          .where(inArray(partnerServicesTable.partnerId, partnerIds))
+      : [];
+
+    const suburbsByPartner = new Map<number, string[]>();
+    for (const area of areas) {
+      const current = suburbsByPartner.get(area.partnerId) ?? [];
+      current.push(area.suburb);
+      suburbsByPartner.set(area.partnerId, current);
+    }
+
+    const servicesByPartner = new Map<number, string[]>();
+    for (const service of services) {
+      const current = servicesByPartner.get(service.partnerId) ?? [];
+      current.push(service.service);
+      servicesByPartner.set(service.partnerId, current);
+    }
+
+    return partnerRows.map((partner) => ({
+      id: partner.id,
+      businessName: partner.businessName,
+      contactName: partner.contactName,
+      abn: partner.abn ?? null,
+      trade: partner.trade,
+      suburbs: suburbsByPartner.get(partner.id) ?? [],
+      radiusKm: partner.radiusKm,
+      availability: partner.availability,
+      status: partner.status,
+      services: servicesByPartner.get(partner.id) ?? [],
+      emergencyJobs: partner.emergencyJobs,
+    }));
+  }
+
+  async listDispatchOffers(filters?: { jobId?: number; partnerId?: number; state?: DispatchState }): Promise<any[]> {
+    const whereClauses = [] as any[];
+    if (filters?.jobId !== undefined) whereClauses.push(eq(dispatchOffersTable.jobId, filters.jobId));
+    if (filters?.partnerId !== undefined) whereClauses.push(eq(dispatchOffersTable.partnerId, filters.partnerId));
+    if (filters?.state) whereClauses.push(eq(dispatchOffersTable.state, filters.state));
+
+    const rows = await this.database
+      .select()
+      .from(dispatchOffersTable)
+      .where(whereClauses.length ? and(...whereClauses) : undefined)
+      .orderBy(desc(dispatchOffersTable.offeredAt));
+
+    const jobIds = rows.map((row) => row.jobId);
+    const partnerIds = rows.map((row) => row.partnerId);
+
+    const jobs = jobIds.length
+      ? await this.database
+          .select()
+          .from(jobsTable)
+          .where(inArray(jobsTable.id, jobIds))
+      : [];
+
+    const partners = partnerIds.length
+      ? await this.database
+          .select()
+          .from(partnersTable)
+          .where(inArray(partnersTable.id, partnerIds))
+      : [];
+
+    const jobsById = new Map(jobs.map((job) => [job.id, job]));
+    const partnersById = new Map(partners.map((partner) => [partner.id, partner]));
+
+    return rows.map((row) => ({
+      id: row.id,
+      jobId: row.jobId,
+      partnerId: row.partnerId,
+      state: row.state,
+      offeredAt: toIso(row.offeredAt),
+      respondedAt: row.respondedAt ? toIso(row.respondedAt) : null,
+      expiresAt: row.expiresAt ? toIso(row.expiresAt) : null,
+      job: jobsById.get(row.jobId)
+        ? {
+            reference: jobsById.get(row.jobId)!.reference,
+            trade: jobsById.get(row.jobId)!.trade,
+            suburb: jobsById.get(row.jobId)!.suburb,
+            status: jobsById.get(row.jobId)!.status,
+          }
+        : null,
+      partner: partnersById.get(row.partnerId)
+        ? {
+            id: partnersById.get(row.partnerId)!.id,
+            businessName: partnersById.get(row.partnerId)!.businessName,
+            trade: partnersById.get(row.partnerId)!.trade,
+          }
+        : null,
+    }));
+  }
+
+  async listPartnerOffers(partnerId: number): Promise<any[]> {
+    const rows = await this.database
+      .select()
+      .from(dispatchOffersTable)
+      .where(eq(dispatchOffersTable.partnerId, partnerId))
+      .orderBy(desc(dispatchOffersTable.offeredAt));
+
+    const jobIds = rows.map((row) => row.jobId);
+    const jobs = jobIds.length
+      ? await this.database
+          .select()
+          .from(jobsTable)
+          .where(inArray(jobsTable.id, jobIds))
+      : [];
+
+    const jobsById = new Map(jobs.map((job) => [job.id, job]));
+
+    return rows.map((row) => {
+      const job = jobsById.get(row.jobId);
+      if (!job) return null;
+
+      const customerVisible = row.state === "accepted";
+
+      return {
+        id: row.id,
+        jobId: row.jobId,
+        partnerId: row.partnerId,
+        state: row.state,
+        offeredAt: toIso(row.offeredAt),
+        respondedAt: row.respondedAt ? toIso(row.respondedAt) : null,
+        expiresAt: row.expiresAt ? toIso(row.expiresAt) : null,
+        job: {
+          reference: job.reference,
+          trade: job.trade,
+          suburb: job.suburb,
+          postcode: job.postcode,
+          urgency: job.urgency,
+          preferredTime: job.preferredTime,
+          description: job.description,
+          customerName: customerVisible ? job.customerName : null,
+          customerPhone: customerVisible ? job.customerPhone : null,
+          customerEmail: customerVisible ? job.customerEmail : null,
+          createdAt: toIso(job.createdAt),
+          updatedAt: toIso(job.updatedAt),
+        },
+      };
+    }).filter(Boolean);
+  }
+
   async createPartner(input: {
     businessName: string;
     contactName: string;
@@ -589,6 +763,115 @@ export class SourceTradieRepository {
     return rows[0] ?? null;
   }
 
+  async createDispatchOffer(input: {
+    jobId: number;
+    partnerId: number;
+    expiresAt: Date;
+  }): Promise<
+    | {
+        kind: "ok";
+        id: number;
+        jobId: number;
+        partnerId: number;
+        state: DispatchState;
+        offeredAt: string;
+        expiresAt: string | null;
+        offer: {
+          id: number;
+          jobId: number;
+          partnerId: number;
+          state: DispatchState;
+          offeredAt: string;
+          expiresAt: string | null;
+        };
+      }
+    | { kind: "not_found"; state?: undefined; jobId?: undefined; offer?: undefined }
+    | { kind: "invalid_job_state"; state?: undefined; jobId?: undefined; offer?: undefined }
+    | { kind: "active_offer_exists"; state?: undefined; jobId?: undefined; offer?: undefined }
+  > {
+    const jobRows = await this.database
+      .select({ id: jobsTable.id, status: jobsTable.status })
+      .from(jobsTable)
+      .where(eq(jobsTable.id, input.jobId))
+      .limit(1);
+
+    const job = jobRows[0];
+    if (!job) return { kind: "not_found" };
+
+    const partnerRows = await this.database
+      .select({ id: partnersTable.id, status: partnersTable.status })
+      .from(partnersTable)
+      .where(eq(partnersTable.id, input.partnerId))
+      .limit(1);
+
+    const partner = partnerRows[0];
+    if (!partner) return { kind: "not_found" };
+
+    const activeOfferRows = await this.database
+      .select({ id: dispatchOffersTable.id })
+      .from(dispatchOffersTable)
+      .where(
+        and(
+          eq(dispatchOffersTable.jobId, input.jobId),
+          inArray(dispatchOffersTable.state, ["pending", "accepted"]),
+        ),
+      )
+      .limit(1);
+
+    if (activeOfferRows[0]) {
+      return { kind: "active_offer_exists" };
+    }
+
+    if (job.status !== "awaiting_dispatch") {
+      return { kind: "invalid_job_state" };
+    }
+
+    const now = new Date();
+
+    const insertedRows = await this.database
+      .insert(dispatchOffersTable)
+      .values({
+        jobId: input.jobId,
+        partnerId: input.partnerId,
+        state: "pending",
+        offeredAt: now,
+        expiresAt: input.expiresAt,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    const inserted = insertedRows[0];
+
+    await this.database
+      .update(jobsTable)
+      .set({ status: "dispatching", updatedAt: now })
+      .where(eq(jobsTable.id, input.jobId));
+
+    await this.database.insert(jobStatusHistoryTable).values({
+      jobId: input.jobId,
+      fromStatus: job.status,
+      toStatus: "dispatching",
+      note: "dispatch_offer_created",
+      createdAt: now,
+    });
+
+    const offer = {
+      id: inserted.id,
+      jobId: inserted.jobId,
+      partnerId: inserted.partnerId,
+      state: inserted.state,
+      offeredAt: toIso(inserted.offeredAt),
+      expiresAt: inserted.expiresAt ? toIso(inserted.expiresAt) : null,
+    };
+
+    return {
+      kind: "ok",
+      ...offer,
+      offer,
+    };
+  }
+
   async decideDispatch(
     id: number,
     decision: string,
@@ -619,6 +902,22 @@ export class SourceTradieRepository {
       };
     }
 
+    if (existing.state !== "pending") {
+      return {
+        kind: "invalid_transition",
+        from: existing.state,
+        to: decision,
+      };
+    }
+
+    if (existing.expiresAt && new Date(existing.expiresAt).getTime() < Date.now()) {
+      return {
+        kind: "invalid_transition",
+        from: existing.state,
+        to: decision,
+      };
+    }
+
     const now = new Date();
 
     const updatedRows = await this.database
@@ -633,18 +932,16 @@ export class SourceTradieRepository {
 
     const updated = updatedRows[0];
 
-    if (decision === "accepted") {
-      const currentJobRows = await this.database
-        .select({ id: jobsTable.id, status: jobsTable.status })
-        .from(jobsTable)
-        .where(eq(jobsTable.id, updated.jobId))
-        .limit(1);
+    const currentJobRows = await this.database
+      .select({ id: jobsTable.id, status: jobsTable.status })
+      .from(jobsTable)
+      .where(eq(jobsTable.id, updated.jobId))
+      .limit(1);
 
-      const currentJob = currentJobRows[0];
-      if (
-        currentJob &&
-        canTransitionJobStatus(currentJob.status, "accepted")
-      ) {
+    const currentJob = currentJobRows[0];
+
+    if (decision === "accepted") {
+      if (currentJob && canTransitionJobStatus(currentJob.status, "accepted")) {
         await this.database
           .update(jobsTable)
           .set({ status: "accepted", updatedAt: now })
@@ -655,6 +952,121 @@ export class SourceTradieRepository {
           fromStatus: currentJob.status,
           toStatus: "accepted",
           note: "dispatch_offer_accepted",
+          createdAt: now,
+        });
+      }
+    }
+
+    if (decision === "declined" || decision === "expired" || decision === "cancelled") {
+      if (currentJob && currentJob.status === "dispatching") {
+        const remainingActiveRows = await this.database
+          .select({ id: dispatchOffersTable.id })
+          .from(dispatchOffersTable)
+          .where(
+            and(
+              eq(dispatchOffersTable.jobId, currentJob.id),
+              inArray(dispatchOffersTable.state, ["pending", "accepted"]),
+            ),
+          )
+          .limit(1);
+
+        if (!remainingActiveRows[0]) {
+          await this.database
+            .update(jobsTable)
+            .set({ status: "awaiting_dispatch", updatedAt: now })
+            .where(eq(jobsTable.id, currentJob.id));
+
+          await this.database.insert(jobStatusHistoryTable).values({
+            jobId: currentJob.id,
+            fromStatus: currentJob.status,
+            toStatus: "awaiting_dispatch",
+            note: `dispatch_offer_${decision}`,
+            createdAt: now,
+          });
+        }
+      }
+    }
+
+    return {
+      kind: "ok",
+      dispatch: {
+        id: updated.id,
+        jobId: updated.jobId,
+        businessId: updated.partnerId,
+        decision: updated.state,
+        offeredAt: toIso(updated.offeredAt),
+        respondedAt: updated.respondedAt ? toIso(updated.respondedAt) : null,
+      },
+    };
+  }
+
+  async expireDispatchOffer(
+    id: number,
+  ): Promise<
+    | { kind: "ok"; dispatch: DispatchApi }
+    | { kind: "not_found" }
+    | { kind: "invalid_transition"; from: string; to: string }
+  > {
+    const existingRows = await this.database
+      .select()
+      .from(dispatchOffersTable)
+      .where(eq(dispatchOffersTable.id, id))
+      .limit(1);
+
+    const existing = existingRows[0];
+    if (!existing) return { kind: "not_found" };
+
+    if (existing.state !== "pending") {
+      return {
+        kind: "invalid_transition",
+        from: existing.state,
+        to: "expired",
+      };
+    }
+
+    const now = new Date();
+    const updatedRows = await this.database
+      .update(dispatchOffersTable)
+      .set({
+        state: "expired",
+        respondedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(dispatchOffersTable.id, id))
+      .returning();
+
+    const updated = updatedRows[0];
+
+    const currentJobRows = await this.database
+      .select({ id: jobsTable.id, status: jobsTable.status })
+      .from(jobsTable)
+      .where(eq(jobsTable.id, updated.jobId))
+      .limit(1);
+
+    const currentJob = currentJobRows[0];
+    if (currentJob && currentJob.status === "dispatching") {
+      const remainingActiveRows = await this.database
+        .select({ id: dispatchOffersTable.id })
+        .from(dispatchOffersTable)
+        .where(
+          and(
+            eq(dispatchOffersTable.jobId, currentJob.id),
+            inArray(dispatchOffersTable.state, ["pending", "accepted"]),
+          ),
+        )
+        .limit(1);
+
+      if (!remainingActiveRows[0]) {
+        await this.database
+          .update(jobsTable)
+          .set({ status: "awaiting_dispatch", updatedAt: now })
+          .where(eq(jobsTable.id, currentJob.id));
+
+        await this.database.insert(jobStatusHistoryTable).values({
+          jobId: currentJob.id,
+          fromStatus: currentJob.status,
+          toStatus: "awaiting_dispatch",
+          note: "dispatch_offer_expired",
           createdAt: now,
         });
       }
@@ -760,6 +1172,7 @@ export class SourceTradieRepository {
       partnerId,
       state: "pending",
       offeredAt: now,
+      expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
       createdAt: now,
       updatedAt: now,
     });

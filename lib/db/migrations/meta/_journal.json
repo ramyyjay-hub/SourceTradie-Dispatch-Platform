@@ -15,6 +15,13 @@
       "when": 1787443200000,
       "tag": "0001_phase2_auth_rbac",
       "breakpoints": false
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787529600000,
+      "tag": "0002_phase3_dispatch_lifecycle",
+      "breakpoints": false
     }
   ]
 }

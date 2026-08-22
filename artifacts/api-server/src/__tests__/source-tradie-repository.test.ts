@@ -28,6 +28,10 @@ function buildRepository() {
       import.meta.dirname,
       "../../../../lib/db/migrations/0001_phase2_auth_rbac.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0002_phase3_dispatch_lifecycle.sql",
+    ),
   ];
 
   return Promise.all(
@@ -160,6 +164,127 @@ describe("source tradie repository", () => {
       .from(partnersTable)
       .where(eq(partnersTable.id, partner.id));
     expect(partnerRows[0]?.status).toBe("pending");
+
+    await client.close();
+  });
+
+  it("creates a pending dispatch offer, enforces a single active offer, and restores dispatchability when declined", async () => {
+    const { repository, db, client } = await buildRepository();
+
+    const partnerA = await repository.createPartner({
+      businessName: "Good Flow Plumbing",
+      contactName: "Sam Wilson",
+      trade: "Plumbing",
+      mobile: "0400000001",
+      email: "sam@goodflow.test",
+      suburbs: ["Brunswick"],
+      radiusKm: 15,
+      emergencyJobs: false,
+      services: ["Leaks"],
+    });
+
+    const partnerB = await repository.createPartner({
+      businessName: "Fast Fix Plumbing",
+      contactName: "Lee Morris",
+      trade: "Plumbing",
+      mobile: "0400000002",
+      email: "lee@fastfix.test",
+      suburbs: ["Coburg"],
+      radiusKm: 15,
+      emergencyJobs: false,
+      services: ["Leaks"],
+    });
+
+    const job = await repository.createJob({
+      description: "Burst pipe under kitchen sink",
+      trade: "Plumbing",
+      suburb: "Brunswick",
+      postcode: "3056",
+      urgency: "Today",
+      preferredTime: "This afternoon",
+      customerName: "Casey Nguyen",
+      images: [],
+    });
+
+    const created = await repository.createDispatchOffer({
+      jobId: job.id,
+      partnerId: partnerA.id,
+      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+    });
+
+    expect(created.kind).toBe("ok");
+  if (created.kind !== "ok") return;
+    expect(created.state).toBe("pending");
+    expect(created.jobId).toBe(job.id);
+
+    const jobRow = await db.select().from(jobsTable).where(eq(jobsTable.id, job.id));
+    expect(jobRow[0]?.status).toBe("dispatching");
+
+    const duplicate = await repository.createDispatchOffer({
+      jobId: job.id,
+      partnerId: partnerB.id,
+      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+    });
+    expect(duplicate.kind).toBe("active_offer_exists");
+
+    const offerRows = await db.select().from(dispatchOffersTable).where(eq(dispatchOffersTable.jobId, job.id));
+    expect(offerRows).toHaveLength(1);
+
+    const decline = await repository.decideDispatch(offerRows[0]!.id, "declined");
+    expect(decline.kind).toBe("ok");
+
+    const jobAfterDecline = await db.select().from(jobsTable).where(eq(jobsTable.id, job.id));
+    expect(jobAfterDecline[0]?.status).toBe("awaiting_dispatch");
+
+    const nextOffer = await repository.createDispatchOffer({
+      jobId: job.id,
+      partnerId: partnerB.id,
+      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+    });
+    expect(nextOffer.kind).toBe("ok");
+
+    await client.close();
+  });
+
+  it("marks an expired dispatch offer and returns the job to awaiting_dispatch", async () => {
+    const { repository, db, client } = await buildRepository();
+
+    const partner = await repository.createPartner({
+      businessName: "Good Flow Plumbing",
+      contactName: "Sam Wilson",
+      trade: "Plumbing",
+      mobile: "0400000001",
+      email: "sam@goodflow.test",
+      suburbs: ["Brunswick"],
+      radiusKm: 15,
+      emergencyJobs: false,
+      services: ["Leaks"],
+    });
+
+    const job = await repository.createJob({
+      description: "Toilet overflowing",
+      trade: "Plumbing",
+      suburb: "Brunswick",
+      postcode: "3056",
+      urgency: "Today",
+      preferredTime: "Urgent",
+      customerName: "Taylor Green",
+      images: [],
+    });
+
+    const created = await repository.createDispatchOffer({
+      jobId: job.id,
+      partnerId: partner.id,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    expect(created.kind).toBe("ok");
+    if (created.kind !== "ok") return;
+
+    const expired = await repository.expireDispatchOffer(created.offer.id);
+    expect(expired.kind).toBe("ok");
+
+    const finalJob = await db.select().from(jobsTable).where(eq(jobsTable.id, job.id));
+    expect(finalJob[0]?.status).toBe("awaiting_dispatch");
 
     await client.close();
   });

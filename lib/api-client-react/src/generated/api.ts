@@ -25,13 +25,17 @@ import type {
   CreateJobResponse,
   Dispatch,
   DispatchDecisionInput,
+  DispatchOffer,
+  DispatchOfferInput,
   GetJobParams,
   HealthStatus,
   Job,
   JobInput,
   JobUpdate,
+  ListApprovedPartnersParams,
   Partner,
   PartnerInput,
+  PartnerOffer,
   PublicJobStatus
 } from './api.schemas';
 
@@ -817,4 +821,461 @@ export function useGetAdminSummary<TData = Awaited<ReturnType<typeof getAdminSum
 
 
 
+
+export const getListJobsAwaitingDispatchUrl = () => {
+
+
+
+
+  return `/api/admin/jobs-awaiting-dispatch`
+}
+
+/**
+ * @summary List jobs awaiting dispatch
+ */
+export const listJobsAwaitingDispatch = async ( options?: Parameters<typeof customFetch>[1]): Promise<Job[]> => {
+
+  return customFetch<Job[]>(getListJobsAwaitingDispatchUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListJobsAwaitingDispatchQueryKey = () => {
+    return [
+    `/api/admin/jobs-awaiting-dispatch`
+    ] as const;
+    }
+
+
+export const getListJobsAwaitingDispatchQueryOptions = <TData = Awaited<ReturnType<typeof listJobsAwaitingDispatch>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listJobsAwaitingDispatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListJobsAwaitingDispatchQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listJobsAwaitingDispatch>>> = ({ signal }) => listJobsAwaitingDispatch({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listJobsAwaitingDispatch>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListJobsAwaitingDispatchQueryResult = NonNullable<Awaited<ReturnType<typeof listJobsAwaitingDispatch>>>
+export type ListJobsAwaitingDispatchQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List jobs awaiting dispatch
+ */
+
+export function useListJobsAwaitingDispatch<TData = Awaited<ReturnType<typeof listJobsAwaitingDispatch>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listJobsAwaitingDispatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListJobsAwaitingDispatchQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListApprovedPartnersUrl = (params?: ListApprovedPartnersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/approved-partners?${stringifiedParams}` : `/api/admin/approved-partners`
+}
+
+/**
+ * @summary List approved partners eligible for dispatch
+ */
+export const listApprovedPartners = async (params?: ListApprovedPartnersParams, options?: Parameters<typeof customFetch>[1]): Promise<Partner[]> => {
+
+  return customFetch<Partner[]>(getListApprovedPartnersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListApprovedPartnersQueryKey = (params?: ListApprovedPartnersParams,) => {
+    return [
+    `/api/admin/approved-partners`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListApprovedPartnersQueryOptions = <TData = Awaited<ReturnType<typeof listApprovedPartners>>, TError = ErrorType<unknown>>(params?: ListApprovedPartnersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listApprovedPartners>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListApprovedPartnersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listApprovedPartners>>> = ({ signal }) => listApprovedPartners(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listApprovedPartners>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListApprovedPartnersQueryResult = NonNullable<Awaited<ReturnType<typeof listApprovedPartners>>>
+export type ListApprovedPartnersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List approved partners eligible for dispatch
+ */
+
+export function useListApprovedPartners<TData = Awaited<ReturnType<typeof listApprovedPartners>>, TError = ErrorType<unknown>>(
+ params?: ListApprovedPartnersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listApprovedPartners>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListApprovedPartnersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListDispatchOffersUrl = () => {
+
+
+
+
+  return `/api/admin/dispatch-offers`
+}
+
+/**
+ * @summary List dispatch offer history
+ */
+export const listDispatchOffers = async ( options?: Parameters<typeof customFetch>[1]): Promise<DispatchOffer[]> => {
+
+  return customFetch<DispatchOffer[]>(getListDispatchOffersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDispatchOffersQueryKey = () => {
+    return [
+    `/api/admin/dispatch-offers`
+    ] as const;
+    }
+
+
+export const getListDispatchOffersQueryOptions = <TData = Awaited<ReturnType<typeof listDispatchOffers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDispatchOffers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDispatchOffersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDispatchOffers>>> = ({ signal }) => listDispatchOffers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDispatchOffers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDispatchOffersQueryResult = NonNullable<Awaited<ReturnType<typeof listDispatchOffers>>>
+export type ListDispatchOffersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List dispatch offer history
+ */
+
+export function useListDispatchOffers<TData = Awaited<ReturnType<typeof listDispatchOffers>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDispatchOffers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDispatchOffersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateDispatchOfferUrl = () => {
+
+
+
+
+  return `/api/admin/dispatch-offers`
+}
+
+/**
+ * @summary Create a dispatch offer
+ */
+export const createDispatchOffer = async (dispatchOfferInput: DispatchOfferInput, options?: Parameters<typeof customFetch>[1]): Promise<DispatchOffer> => {
+
+  return customFetch<DispatchOffer>(getCreateDispatchOfferUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(dispatchOfferInput)
+  }
+);}
+
+
+
+
+
+export const getCreateDispatchOfferMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDispatchOffer>>, TError,{data: BodyType<DispatchOfferInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createDispatchOffer>>, TError,{data: BodyType<DispatchOfferInput>}, TContext> => {
+
+const mutationKey = ['createDispatchOffer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDispatchOffer>>, {data: BodyType<DispatchOfferInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createDispatchOffer(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateDispatchOfferMutationResult = NonNullable<Awaited<ReturnType<typeof createDispatchOffer>>>
+    export type CreateDispatchOfferMutationBody = BodyType<DispatchOfferInput>
+    export type CreateDispatchOfferMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a dispatch offer
+ */
+export const useCreateDispatchOffer = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDispatchOffer>>, TError,{data: BodyType<DispatchOfferInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createDispatchOffer>>,
+        TError,
+        {data: BodyType<DispatchOfferInput>},
+        TContext
+      > => {
+      return useMutation(getCreateDispatchOfferMutationOptions(options));
+    }
+
+export const getListPartnerOffersUrl = () => {
+
+
+
+
+  return `/api/partner/offers`
+}
+
+/**
+ * @summary List offers for the authenticated partner
+ */
+export const listPartnerOffers = async ( options?: Parameters<typeof customFetch>[1]): Promise<PartnerOffer[]> => {
+
+  return customFetch<PartnerOffer[]>(getListPartnerOffersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPartnerOffersQueryKey = () => {
+    return [
+    `/api/partner/offers`
+    ] as const;
+    }
+
+
+export const getListPartnerOffersQueryOptions = <TData = Awaited<ReturnType<typeof listPartnerOffers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPartnerOffers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPartnerOffersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPartnerOffers>>> = ({ signal }) => listPartnerOffers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPartnerOffers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPartnerOffersQueryResult = NonNullable<Awaited<ReturnType<typeof listPartnerOffers>>>
+export type ListPartnerOffersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List offers for the authenticated partner
+ */
+
+export function useListPartnerOffers<TData = Awaited<ReturnType<typeof listPartnerOffers>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPartnerOffers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPartnerOffersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExpireDispatchOfferUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/dispatch-offers/${id}/expire`
+}
+
+/**
+ * @summary Expire a pending dispatch offer
+ */
+export const expireDispatchOffer = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<Dispatch> => {
+
+  return customFetch<Dispatch>(getExpireDispatchOfferUrl(id),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+
+export const getExpireDispatchOfferMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof expireDispatchOffer>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof expireDispatchOffer>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['expireDispatchOffer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof expireDispatchOffer>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  expireDispatchOffer(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExpireDispatchOfferMutationResult = NonNullable<Awaited<ReturnType<typeof expireDispatchOffer>>>
+
+    export type ExpireDispatchOfferMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Expire a pending dispatch offer
+ */
+export const useExpireDispatchOffer = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof expireDispatchOffer>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof expireDispatchOffer>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getExpireDispatchOfferMutationOptions(options));
+    }
 
