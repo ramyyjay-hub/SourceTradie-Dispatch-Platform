@@ -3,7 +3,9 @@ import {
   appUsersTable,
   dispatchOffersTable,
   dispatchStateEnum,
+  jobAiAssessmentsTable,
   jobImagesTable,
+  jobIntakeSubmissionsTable,
   jobsTable,
   jobStatusEnum,
   jobStatusHistoryTable,
@@ -13,6 +15,13 @@ import {
 } from "@workspace/db/schema";
 import type { db as WorkspaceDb } from "@workspace/db";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import {
+  createServerAiProvider,
+  SafeJobAssessmentService,
+  type JobAiProvider,
+  type StoredAssessment,
+} from "./job-ai-provider";
+import { classifySafety } from "./safety-classifier";
 
 type DbLike = typeof WorkspaceDb;
 
@@ -31,6 +40,7 @@ export type JobApi = {
   customerEmail: string | null;
   createdAt: string;
   images: string[];
+  assessment: JobAssessmentApi | null;
 };
 
 export type CreatedJobApi = JobApi & {
@@ -42,6 +52,35 @@ export type PublicJobStatusApi = {
   status: string;
   createdAt: string;
   updatedAt: string;
+  intake: {
+    description: string;
+    trade: string;
+    suburb: string;
+    postcode: string;
+    urgency: string;
+    preferredTime: string;
+    customerName: string;
+    customerPhone: string | null;
+    customerEmail: string | null;
+  };
+  assessment: JobAssessmentApi | null;
+};
+
+export type JobAssessmentApi = {
+  outcome: string;
+  provider: string;
+  model: string | null;
+  safetyCodes: string[];
+  assessment: StoredAssessment;
+  createdAt: string;
+};
+
+export type PartnerRecommendationApi = {
+  partnerId: number;
+  score: number;
+  eligible: boolean;
+  codes: string[];
+  disqualifications: string[];
 };
 
 export type PartnerApi = {
@@ -162,7 +201,11 @@ function uniqueNormalized(values: string[]): string[] {
 }
 
 export class SourceTradieRepository {
-  constructor(private readonly database: DbLike) {}
+  private readonly assessmentService: SafeJobAssessmentService;
+
+  constructor(private readonly database: DbLike, provider?: JobAiProvider) {
+    this.assessmentService = new SafeJobAssessmentService(provider ?? createServerAiProvider());
+  }
 
   private async getJobImages(jobIds: number[]) {
     if (!jobIds.length) return new Map<number, string[]>();
@@ -185,6 +228,7 @@ export class SourceTradieRepository {
   private toJobApi(
     row: typeof jobsTable.$inferSelect,
     images: string[],
+    assessment: JobAssessmentApi | null = null,
   ): JobApi {
     return {
       id: row.id,
@@ -201,6 +245,77 @@ export class SourceTradieRepository {
       customerEmail: row.customerEmail ?? null,
       createdAt: toIso(row.createdAt),
       images,
+      assessment,
+    };
+  }
+
+  private async getLatestAssessments(jobIds: number[]): Promise<Map<number, JobAssessmentApi>> {
+    if (!jobIds.length) return new Map();
+    const rows = await this.database
+      .select()
+      .from(jobAiAssessmentsTable)
+      .where(inArray(jobAiAssessmentsTable.jobId, jobIds))
+      .orderBy(desc(jobAiAssessmentsTable.createdAt), desc(jobAiAssessmentsTable.id));
+    const latest = new Map<number, JobAssessmentApi>();
+    for (const row of rows) {
+      if (latest.has(row.jobId)) continue;
+      latest.set(row.jobId, {
+        outcome: row.outcome,
+        provider: row.provider,
+        model: row.model ?? null,
+        safetyCodes: row.safetyCodes,
+        assessment: row.assessment as StoredAssessment,
+        createdAt: toIso(row.createdAt),
+      });
+    }
+    return latest;
+  }
+
+  private async assessSubmission(input: {
+    jobId: number;
+    submissionId: number;
+    description: string;
+    trade: string;
+    suburb: string;
+    postcode: string;
+    urgency: string;
+    preferredAttendanceTime: string;
+    photoCount: number;
+  }): Promise<JobAssessmentApi> {
+    const safety = classifySafety(input.description);
+    const result = await this.assessmentService.assess({
+      description: input.description,
+      trade: input.trade,
+      suburb: input.suburb,
+      postcode: input.postcode,
+      urgency: input.urgency,
+      preferredAttendanceTime: input.preferredAttendanceTime,
+      photoContext: {
+        provided: input.photoCount > 0,
+        count: input.photoCount,
+      },
+      safety,
+    });
+    const rows = await this.database
+      .insert(jobAiAssessmentsTable)
+      .values({
+        jobId: input.jobId,
+        submissionId: input.submissionId,
+        provider: result.provider,
+        model: result.model,
+        outcome: result.outcome,
+        safetyCodes: safety.codes,
+        assessment: result.assessment,
+      })
+      .returning();
+    const row = rows[0]!;
+    return {
+      outcome: row.outcome,
+      provider: row.provider,
+      model: row.model ?? null,
+      safetyCodes: row.safetyCodes,
+      assessment: row.assessment as StoredAssessment,
+      createdAt: toIso(row.createdAt),
     };
   }
 
@@ -235,8 +350,15 @@ export class SourceTradieRepository {
       .orderBy(desc(jobsTable.createdAt));
 
     const imagesByJobId = await this.getJobImages(rows.map((row) => row.id));
+    const assessmentsByJobId = await this.getLatestAssessments(rows.map((row) => row.id));
 
-    return rows.map((row) => this.toJobApi(row, imagesByJobId.get(row.id) ?? []));
+    return rows.map((row) =>
+      this.toJobApi(
+        row,
+        imagesByJobId.get(row.id) ?? [],
+        assessmentsByJobId.get(row.id) ?? null,
+      ),
+    );
   }
 
   async createJob(input: {
@@ -251,7 +373,7 @@ export class SourceTradieRepository {
     customerEmail?: string;
     images?: string[];
   }): Promise<CreatedJobApi> {
-    return this.database.transaction(async (tx) => {
+    const created = await this.database.transaction(async (tx) => {
       const now = new Date();
       const placeholderReference = `ST-PENDING-${now.getTime()}-${Math.floor(
         Math.random() * 10000,
@@ -307,12 +429,48 @@ export class SourceTradieRepository {
         note: "job_submitted",
         createdAt: now,
       });
+      const submissionRows = await tx
+        .insert(jobIntakeSubmissionsTable)
+        .values({
+          jobId: updated.id,
+          customerConfirmedValues: {
+            description: input.description,
+            trade: input.trade,
+            suburb: input.suburb,
+            postcode: input.postcode,
+            urgency: input.urgency,
+            preferredTime: input.preferredTime,
+            customerName: input.customerName,
+            customerPhone: input.customerPhone ?? null,
+            customerEmail: input.customerEmail ?? null,
+            images: imageNames,
+          },
+          createdAt: now,
+        })
+        .returning({ id: jobIntakeSubmissionsTable.id });
 
       return {
-        ...this.toJobApi(updated, imageNames),
+        job: updated,
+        images: imageNames,
         statusAccessToken,
+        submissionId: submissionRows[0]!.id,
       };
     });
+    const assessment = await this.assessSubmission({
+      jobId: created.job.id,
+      submissionId: created.submissionId,
+      description: input.description,
+      trade: input.trade,
+      suburb: input.suburb,
+      postcode: input.postcode,
+      urgency: input.urgency,
+      preferredAttendanceTime: input.preferredTime,
+      photoCount: created.images.length,
+    });
+    return {
+      ...this.toJobApi(created.job, created.images, assessment),
+      statusAccessToken: created.statusAccessToken,
+    };
   }
 
   async getJob(id: number): Promise<JobApi | null> {
@@ -326,17 +484,17 @@ export class SourceTradieRepository {
     if (!row) return null;
 
     const imagesByJobId = await this.getJobImages([id]);
-    return this.toJobApi(row, imagesByJobId.get(id) ?? []);
+    const assessmentsByJobId = await this.getLatestAssessments([id]);
+    return this.toJobApi(
+      row,
+      imagesByJobId.get(id) ?? [],
+      assessmentsByJobId.get(id) ?? null,
+    );
   }
 
   async getPublicJobStatusByToken(jobId: number, token: string): Promise<PublicJobStatusApi | null> {
     const rows = await this.database
-      .select({
-        reference: jobsTable.reference,
-        status: jobsTable.status,
-        createdAt: jobsTable.createdAt,
-        updatedAt: jobsTable.updatedAt,
-      })
+      .select()
       .from(jobsTable)
       .where(and(eq(jobsTable.id, jobId), eq(jobsTable.publicStatusToken, token)))
       .limit(1);
@@ -344,12 +502,100 @@ export class SourceTradieRepository {
     const row = rows[0];
     if (!row) return null;
 
+    const assessmentsByJobId = await this.getLatestAssessments([row.id]);
     return {
       reference: row.reference,
       status: row.status,
       createdAt: toIso(row.createdAt),
       updatedAt: toIso(row.updatedAt),
+      intake: {
+        description: row.description,
+        trade: row.trade,
+        suburb: row.suburb,
+        postcode: row.postcode,
+        urgency: row.urgency,
+        preferredTime: row.preferredTime,
+        customerName: row.customerName,
+        customerPhone: row.customerPhone ?? null,
+        customerEmail: row.customerEmail ?? null,
+      },
+      assessment: assessmentsByJobId.get(row.id) ?? null,
     };
+  }
+
+  async correctJobIntake(
+    jobId: number,
+    token: string,
+    input: {
+      description: string;
+      trade: string;
+      suburb: string;
+      postcode: string;
+      urgency: string;
+      preferredTime: string;
+      customerName: string;
+      customerPhone?: string;
+      customerEmail?: string;
+    },
+  ): Promise<PublicJobStatusApi | null> {
+    const currentRows = await this.database
+      .select()
+      .from(jobsTable)
+      .where(and(eq(jobsTable.id, jobId), eq(jobsTable.publicStatusToken, token)))
+      .limit(1);
+    const current = currentRows[0];
+    if (!current) return null;
+
+    const created = await this.database.transaction(async (tx) => {
+      const now = new Date();
+      const updatedRows = await tx
+        .update(jobsTable)
+        .set({
+          description: input.description,
+          trade: input.trade,
+          suburb: input.suburb,
+          postcode: input.postcode,
+          urgency: input.urgency,
+          preferredTime: input.preferredTime,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone ?? null,
+          customerEmail: input.customerEmail ?? null,
+          updatedAt: now,
+        })
+        .where(eq(jobsTable.id, jobId))
+        .returning();
+      const submissionRows = await tx
+        .insert(jobIntakeSubmissionsTable)
+        .values({
+          jobId,
+          customerConfirmedValues: {
+            description: input.description,
+            trade: input.trade,
+            suburb: input.suburb,
+            postcode: input.postcode,
+            urgency: input.urgency,
+            preferredTime: input.preferredTime,
+            customerName: input.customerName,
+            customerPhone: input.customerPhone ?? null,
+            customerEmail: input.customerEmail ?? null,
+          },
+          createdAt: now,
+        })
+        .returning({ id: jobIntakeSubmissionsTable.id });
+      return { job: updatedRows[0]!, submissionId: submissionRows[0]!.id };
+    });
+    await this.assessSubmission({
+      jobId,
+      submissionId: created.submissionId,
+      description: input.description,
+      trade: input.trade,
+      suburb: input.suburb,
+      postcode: input.postcode,
+      urgency: input.urgency,
+      preferredAttendanceTime: input.preferredTime,
+      photoCount: (await this.getJobImages([jobId])).get(jobId)?.length ?? 0,
+    });
+    return this.getPublicJobStatusByToken(jobId, token);
   }
 
   async updateJobStatus(
@@ -401,10 +647,15 @@ export class SourceTradieRepository {
     });
 
     const imagesByJobId = await this.getJobImages([id]);
+    const assessmentsByJobId = await this.getLatestAssessments([id]);
 
     return {
       kind: "ok",
-      job: this.toJobApi(updated, imagesByJobId.get(id) ?? []),
+      job: this.toJobApi(
+        updated,
+        imagesByJobId.get(id) ?? [],
+        assessmentsByJobId.get(id) ?? null,
+      ),
     };
   }
 
@@ -472,7 +723,72 @@ export class SourceTradieRepository {
       .orderBy(desc(jobsTable.createdAt));
 
     const imagesByJobId = await this.getJobImages(rows.map((row) => row.id));
-    return rows.map((row) => this.toJobApi(row, imagesByJobId.get(row.id) ?? []));
+    const assessmentsByJobId = await this.getLatestAssessments(rows.map((row) => row.id));
+    return rows.map((row) =>
+      this.toJobApi(
+        row,
+        imagesByJobId.get(row.id) ?? [],
+        assessmentsByJobId.get(row.id) ?? null,
+      ),
+    );
+  }
+
+  async getPartnerRecommendations(jobId: number): Promise<PartnerRecommendationApi[] | null> {
+    const jobs = await this.database
+      .select()
+      .from(jobsTable)
+      .where(eq(jobsTable.id, jobId))
+      .limit(1);
+    const job = jobs[0];
+    if (!job) return null;
+    const partners = await this.listPartners();
+    const normalized = (value: string) => value.trim().toLocaleLowerCase();
+    const jobTrade = normalized(job.trade);
+    const jobSuburb = normalized(job.suburb);
+    const isEmergency = classifySafety(job.description).interruptFlow;
+
+    return partners
+      .map((partner) => {
+        const codes: string[] = [];
+        const disqualifications: string[] = [];
+        if (partner.status === "approved") codes.push("APPROVED");
+        else disqualifications.push("NOT_APPROVED");
+        if (partner.availability) codes.push("AVAILABLE");
+        else disqualifications.push("UNAVAILABLE");
+        if (normalized(partner.trade) === jobTrade) codes.push("TRADE_MATCH");
+        else disqualifications.push("TRADE_MISMATCH");
+        if (partner.suburbs.some((suburb) => normalized(suburb) === jobSuburb)) {
+          codes.push("SERVICE_AREA_MATCH");
+        } else {
+          disqualifications.push("OUT_OF_SERVICE_AREA");
+        }
+        if (isEmergency) {
+          if (partner.emergencyJobs) codes.push("EMERGENCY_ENABLED");
+          else disqualifications.push("EMERGENCY_NOT_ENABLED");
+        }
+        const eligible = disqualifications.length === 0;
+        const score =
+          (partner.status === "approved" ? 30 : 0) +
+          (partner.availability ? 25 : 0) +
+          (normalized(partner.trade) === jobTrade ? 25 : 0) +
+          (partner.suburbs.some((suburb) => normalized(suburb) === jobSuburb) ? 20 : 0) +
+          (isEmergency && partner.emergencyJobs ? 10 : 0);
+        return {
+          partnerId: partner.id,
+          score,
+          eligible,
+          codes,
+          disqualifications,
+          name: partner.businessName,
+        };
+      })
+      .sort(
+        (left, right) =>
+          right.score - left.score ||
+          left.name.localeCompare(right.name) ||
+          left.partnerId - right.partnerId,
+      )
+      .map(({ name: _name, ...recommendation }) => recommendation);
   }
 
   async listApprovedPartners(trade?: string): Promise<PartnerApi[]> {

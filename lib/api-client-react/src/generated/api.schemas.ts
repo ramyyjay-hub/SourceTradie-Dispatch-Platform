@@ -9,6 +9,105 @@ export interface HealthStatus {
   status: string;
 }
 
+export type TradeClassification = typeof TradeClassification[keyof typeof TradeClassification];
+
+
+export const TradeClassification = {
+  plumbing: 'plumbing',
+  electrical: 'electrical',
+  heating_cooling: 'heating_cooling',
+  unsure: 'unsure',
+} as const;
+
+export type UrgencyClassification = typeof UrgencyClassification[keyof typeof UrgencyClassification];
+
+
+export const UrgencyClassification = {
+  not_urgent: 'not_urgent',
+  soon: 'soon',
+  today: 'today',
+  emergency: 'emergency',
+  unsure: 'unsure',
+} as const;
+
+export interface PhotoContext {
+  provided: boolean;
+  /** @minimum 0 */
+  count: number;
+}
+
+export type JobIntakeAssessmentDraftConfidence = typeof JobIntakeAssessmentDraftConfidence[keyof typeof JobIntakeAssessmentDraftConfidence];
+
+
+export const JobIntakeAssessmentDraftConfidence = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type JobIntakeAssessmentDraftCodesItem = typeof JobIntakeAssessmentDraftCodesItem[keyof typeof JobIntakeAssessmentDraftCodesItem];
+
+
+export const JobIntakeAssessmentDraftCodesItem = {
+  ROUTING_REVIEW: 'ROUTING_REVIEW',
+  URGENCY_REVIEW: 'URGENCY_REVIEW',
+  MANUAL_REVIEW_REQUIRED: 'MANUAL_REVIEW_REQUIRED',
+} as const;
+
+export interface JobIntakeAssessmentDraft {
+  tradeClassification: TradeClassification;
+  urgencyClassification: UrgencyClassification;
+  /**
+     * @maxLength 120
+     * @nullable
+     */
+  suburb: string | null;
+  /**
+     * @maxLength 16
+     * @nullable
+     */
+  postcode: string | null;
+  /**
+     * @maxLength 160
+     * @nullable
+     */
+  preferredAttendanceTime: string | null;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  neutralProblemSummary: string | null;
+  /**
+     * @maxLength 120
+     * @nullable
+     */
+  equipment: string | null;
+  /**
+     * @maxLength 120
+     * @nullable
+     */
+  brand: string | null;
+  /**
+     * @maxLength 120
+     * @nullable
+     */
+  model: string | null;
+  photoContext: PhotoContext;
+  confidence: JobIntakeAssessmentDraftConfidence;
+  /** @maxItems 3 */
+  codes: JobIntakeAssessmentDraftCodesItem[];
+}
+
+export interface JobAssessment {
+  outcome: string;
+  provider: string;
+  /** @nullable */
+  model: string | null;
+  safetyCodes: string[];
+  assessment: JobIntakeAssessmentDraft;
+  createdAt: string;
+}
+
 export interface Job {
   id: number;
   reference: string;
@@ -26,6 +125,7 @@ export interface Job {
   customerEmail?: string | null;
   createdAt: string;
   images?: string[];
+  assessment: JobAssessment | null;
 }
 
 export interface CreateJobResponse {
@@ -37,11 +137,27 @@ export interface CreateJobResponse {
   statusAccessUrl: string;
 }
 
+export interface CustomerConfirmedIntake {
+  description: string;
+  trade: string;
+  suburb: string;
+  postcode: string;
+  urgency: string;
+  preferredTime: string;
+  customerName: string;
+  /** @nullable */
+  customerPhone?: string | null;
+  /** @nullable */
+  customerEmail?: string | null;
+}
+
 export interface PublicJobStatus {
   reference: string;
   status: string;
   createdAt: string;
   updatedAt: string;
+  intake: CustomerConfirmedIntake;
+  assessment?: JobAssessment | null;
 }
 
 export interface JobInput {
@@ -60,6 +176,25 @@ export interface JobInput {
 
 export interface JobUpdate {
   status?: string;
+}
+
+export interface JobIntakeCorrection {
+  /** @minLength 4 */
+  description: string;
+  /** @minLength 1 */
+  trade: string;
+  /** @minLength 1 */
+  suburb: string;
+  /** @minLength 1 */
+  postcode: string;
+  /** @minLength 1 */
+  urgency: string;
+  /** @minLength 1 */
+  preferredTime: string;
+  /** @minLength 1 */
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
 }
 
 export interface Partner {
@@ -149,6 +284,14 @@ export type PartnerOffer = DispatchOffer & {
   job?: PartnerOfferJob;
 };
 
+export interface PartnerRecommendation {
+  partnerId: number;
+  score: number;
+  eligible: boolean;
+  codes: string[];
+  disqualifications: string[];
+}
+
 export interface AdminSummary {
   newRequests: number;
   awaitingDispatch: number;
@@ -164,6 +307,13 @@ export interface AdminSummary {
 export type JobStatusTokenParameter = string;
 
 export type GetJobParams = {
+/**
+ * @minLength 16
+ */
+token: JobStatusTokenParameter;
+};
+
+export type CorrectJobIntakeParams = {
 /**
  * @minLength 16
  */

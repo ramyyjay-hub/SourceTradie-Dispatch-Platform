@@ -6,6 +6,8 @@ import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import {
   dispatchOffersTable,
+  jobAiAssessmentsTable,
+  jobIntakeSubmissionsTable,
   jobsTable,
   jobStatusHistoryTable,
   partnersTable,
@@ -15,8 +17,9 @@ import {
   canTransitionDispatchState,
   canTransitionJobStatus,
 } from "../lib/source-tradie-repository";
+import type { JobAiProvider } from "../lib/job-ai-provider";
 
-function buildRepository() {
+function buildRepository(provider?: JobAiProvider) {
   const client = new PGlite();
 
   const migrationPaths = [
@@ -32,6 +35,10 @@ function buildRepository() {
       import.meta.dirname,
       "../../../../lib/db/migrations/0002_phase3_dispatch_lifecycle.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0003_phase4_safe_intake_ai.sql",
+    ),
   ];
 
   return Promise.all(
@@ -41,16 +48,38 @@ function buildRepository() {
   ).then(() => {
     const testDb = drizzle(client);
     return {
-      repository: new SourceTradieRepository(testDb as any),
+      repository: new SourceTradieRepository(testDb as any, provider),
       db: testDb,
       client,
     };
   });
 }
 
+const successfulProvider: JobAiProvider = {
+  assess: async () => ({
+    provider: "openai",
+    model: "test-model",
+    outcome: "success",
+    assessment: {
+      tradeClassification: "electrical",
+      urgencyClassification: "today",
+      suburb: "Richmond",
+      postcode: "3121",
+      preferredAttendanceTime: "Today",
+      neutralProblemSummary: "Electrical issue requires review.",
+      equipment: null,
+      brand: null,
+      model: null,
+      photoContext: { provided: false, count: 0 },
+      confidence: "medium",
+      codes: ["ROUTING_REVIEW"],
+    },
+  }),
+};
+
 describe("source tradie repository", () => {
   it("creates jobs with stable references and history records", async () => {
-    const { repository, db, client } = await buildRepository();
+    const { repository, db, client } = await buildRepository(successfulProvider);
 
     const job = await repository.createJob({
       description: "Kitchen tap leaking near sink trap",
@@ -67,6 +96,20 @@ describe("source tradie repository", () => {
 
     expect(job.reference).toBe(`ST-${job.id}`);
     expect(job.images).toEqual(["tap-1.jpg", "tap-2.jpg"]);
+    expect(job.assessment?.assessment).toEqual({
+      tradeClassification: "electrical",
+      urgencyClassification: "today",
+      suburb: "Richmond",
+      postcode: "3121",
+      preferredAttendanceTime: "Today",
+      neutralProblemSummary: "Electrical issue requires review.",
+      equipment: null,
+      brand: null,
+      model: null,
+      photoContext: { provided: true, count: 2 },
+      confidence: "medium",
+      codes: ["ROUTING_REVIEW"],
+    });
 
     const history = await db
       .select()
@@ -286,6 +329,156 @@ describe("source tradie repository", () => {
     const finalJob = await db.select().from(jobsTable).where(eq(jobsTable.id, job.id));
     expect(finalJob[0]?.status).toBe("awaiting_dispatch");
 
+    await client.close();
+  });
+
+  it("applies deterministic safety overrides before the AI provider", async () => {
+    let providerCalled = false;
+    const provider: JobAiProvider = {
+      assess: async () => {
+        providerCalled = true;
+        return successfulProvider.assess({
+          description: "",
+          trade: "",
+          suburb: "",
+          postcode: "",
+          urgency: "",
+          preferredAttendanceTime: "",
+          photoContext: { provided: false, count: 0 },
+          safety: { level: "standard", interruptFlow: false, codes: [], customerMessage: null },
+        });
+      },
+    };
+    const { repository, db, client } = await buildRepository(provider);
+    const job = await repository.createJob({
+      description: "There is a gas smell and sparks near the meter.",
+      trade: "Not sure",
+      suburb: "Brunswick",
+      postcode: "3056",
+      urgency: "Soon",
+      preferredTime: "Flexible",
+      customerName: "Alex Morgan",
+    });
+    expect(providerCalled).toBe(false);
+    expect(job.assessment?.outcome).toBe("safety_override");
+    expect(job.assessment?.safetyCodes).toEqual(["GAS_SMELL", "SPARKS"]);
+    const assessments = await db.select().from(jobAiAssessmentsTable);
+    expect(assessments).toHaveLength(1);
+    await client.close();
+  });
+
+  it("persists success and failure provider outcomes without blocking job creation", async () => {
+    const failingProvider: JobAiProvider = {
+      assess: async () => ({
+        provider: "openai",
+        model: "configured-model",
+        outcome: "failure",
+        assessment: {
+          tradeClassification: "unsure",
+          urgencyClassification: "unsure",
+          suburb: null,
+          postcode: null,
+          preferredAttendanceTime: null,
+          neutralProblemSummary: null,
+          equipment: null,
+          brand: null,
+          model: null,
+          photoContext: { provided: false, count: 0 },
+          confidence: "low",
+          codes: ["MANUAL_REVIEW_REQUIRED"],
+        },
+      }),
+    };
+    const { repository, db, client } = await buildRepository(failingProvider);
+    const job = await repository.createJob({
+      description: "Kitchen tap leaks slowly.",
+      trade: "Plumbing",
+      suburb: "Brunswick",
+      postcode: "3056",
+      urgency: "Soon",
+      preferredTime: "Flexible",
+      customerName: "Alex Morgan",
+    });
+    expect(job.id).toBeGreaterThan(0);
+    expect(job.assessment?.outcome).toBe("failure");
+    expect(job.assessment?.provider).toBe("openai");
+    expect(job.assessment?.model).toBe("configured-model");
+    expect(await db.select().from(jobAiAssessmentsTable)).toHaveLength(1);
+    await client.close();
+  });
+
+  it("keeps customer corrections authoritative while retaining immutable intake history", async () => {
+    const { repository, db, client } = await buildRepository(successfulProvider);
+    const job = await repository.createJob({
+      description: "Lights flicker in the kitchen.",
+      trade: "Not sure",
+      suburb: "Brunswick",
+      postcode: "3056",
+      urgency: "Soon",
+      preferredTime: "Flexible",
+      customerName: "Alex Morgan",
+    });
+    const corrected = await repository.correctJobIntake(job.id, job.statusAccessToken, {
+      description: "Kitchen tap leaks slowly.",
+      trade: "Plumbing",
+      suburb: "Coburg",
+      postcode: "3058",
+      urgency: "Not urgent",
+      preferredTime: "Weekend",
+      customerName: "Alex Morgan",
+    });
+    expect(corrected?.intake.trade).toBe("Plumbing");
+    expect(corrected?.intake.urgency).toBe("Not urgent");
+    expect(corrected?.assessment?.assessment.tradeClassification).toBe("electrical");
+    const submissions = await db.select().from(jobIntakeSubmissionsTable);
+    expect(submissions).toHaveLength(2);
+    await expect(
+      db
+        .update(jobIntakeSubmissionsTable)
+        .set({ customerConfirmedValues: {} })
+        .where(eq(jobIntakeSubmissionsTable.id, submissions[0]!.id)),
+    ).rejects.toThrow();
+    await client.close();
+  });
+
+  it("ranks matching partners deterministically without creating dispatch offers", async () => {
+    const { repository, db, client } = await buildRepository(successfulProvider);
+    const job = await repository.createJob({
+      description: "Kitchen tap leaks slowly.",
+      trade: "Plumbing",
+      suburb: "Brunswick",
+      postcode: "3056",
+      urgency: "Soon",
+      preferredTime: "Flexible",
+      customerName: "Alex Morgan",
+    });
+    const alpha = await repository.createPartner({
+      businessName: "Alpha Plumbing",
+      contactName: "A",
+      trade: "Plumbing",
+      mobile: "0400000001",
+      email: "a@example.com",
+      suburbs: ["Brunswick"],
+      radiusKm: 10,
+    });
+    const bravo = await repository.createPartner({
+      businessName: "Bravo Electrical",
+      contactName: "B",
+      trade: "Electrical",
+      mobile: "0400000002",
+      email: "b@example.com",
+      suburbs: ["Brunswick"],
+      radiusKm: 10,
+    });
+    await db.update(partnersTable).set({ status: "approved", availability: true });
+    const recommendations = await repository.getPartnerRecommendations(job.id);
+    expect(recommendations?.map((item) => item.partnerId)).toEqual([alpha.id, bravo.id]);
+    expect(recommendations?.[0]).toMatchObject({
+      eligible: true,
+      codes: expect.arrayContaining(["TRADE_MATCH", "SERVICE_AREA_MATCH"]),
+    });
+    expect(recommendations?.[1]?.disqualifications).toContain("TRADE_MISMATCH");
+    expect(await db.select().from(dispatchOffersTable)).toHaveLength(0);
     await client.close();
   });
 });

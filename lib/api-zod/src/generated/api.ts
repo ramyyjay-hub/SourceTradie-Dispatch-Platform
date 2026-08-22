@@ -20,6 +20,26 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary List job requests (admin only)
  */
+export const listJobsResponseAssessmentOneAssessmentSuburbMax = 120;
+
+export const listJobsResponseAssessmentOneAssessmentPostcodeMax = 16;
+
+export const listJobsResponseAssessmentOneAssessmentPreferredAttendanceTimeMax = 160;
+
+export const listJobsResponseAssessmentOneAssessmentNeutralProblemSummaryMax = 500;
+
+export const listJobsResponseAssessmentOneAssessmentEquipmentMax = 120;
+
+export const listJobsResponseAssessmentOneAssessmentBrandMax = 120;
+
+export const listJobsResponseAssessmentOneAssessmentModelMax = 120;
+
+export const listJobsResponseAssessmentOneAssessmentPhotoContextCountMin = 0;
+
+export const listJobsResponseAssessmentOneAssessmentCodesMax = 3;
+
+
+
 export const ListJobsResponseItem = zod.object({
   "id": zod.number(),
   "reference": zod.string(),
@@ -34,7 +54,31 @@ export const ListJobsResponseItem = zod.object({
   "customerPhone": zod.string().nullish(),
   "customerEmail": zod.string().nullish(),
   "createdAt": zod.string(),
-  "images": zod.array(zod.string()).optional()
+  "images": zod.array(zod.string()).optional(),
+  "assessment": zod.union([zod.object({
+  "outcome": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string().nullable(),
+  "safetyCodes": zod.array(zod.string()),
+  "assessment": zod.object({
+  "tradeClassification": zod.enum(['plumbing', 'electrical', 'heating_cooling', 'unsure']),
+  "urgencyClassification": zod.enum(['not_urgent', 'soon', 'today', 'emergency', 'unsure']),
+  "suburb": zod.string().max(listJobsResponseAssessmentOneAssessmentSuburbMax).nullable(),
+  "postcode": zod.string().max(listJobsResponseAssessmentOneAssessmentPostcodeMax).nullable(),
+  "preferredAttendanceTime": zod.string().max(listJobsResponseAssessmentOneAssessmentPreferredAttendanceTimeMax).nullable(),
+  "neutralProblemSummary": zod.string().max(listJobsResponseAssessmentOneAssessmentNeutralProblemSummaryMax).nullable(),
+  "equipment": zod.string().max(listJobsResponseAssessmentOneAssessmentEquipmentMax).nullable(),
+  "brand": zod.string().max(listJobsResponseAssessmentOneAssessmentBrandMax).nullable(),
+  "model": zod.string().max(listJobsResponseAssessmentOneAssessmentModelMax).nullable(),
+  "photoContext": zod.object({
+  "provided": zod.boolean(),
+  "count": zod.number().min(listJobsResponseAssessmentOneAssessmentPhotoContextCountMin)
+}),
+  "confidence": zod.enum(['low', 'medium', 'high']),
+  "codes": zod.array(zod.enum(['ROUTING_REVIEW', 'URGENCY_REVIEW', 'MANUAL_REVIEW_REQUIRED'])).max(listJobsResponseAssessmentOneAssessmentCodesMax)
+}),
+  "createdAt": zod.string()
+}),zod.null()])
 })
 export const ListJobsResponse = zod.array(ListJobsResponseItem)
 
@@ -84,11 +128,66 @@ export const GetJobQueryParams = zod.object({
   "token": zod.coerce.string().min(getJobQueryTokenMin)
 })
 
+export const getJobResponseAssessmentOneAssessmentSuburbMax = 120;
+
+export const getJobResponseAssessmentOneAssessmentPostcodeMax = 16;
+
+export const getJobResponseAssessmentOneAssessmentPreferredAttendanceTimeMax = 160;
+
+export const getJobResponseAssessmentOneAssessmentNeutralProblemSummaryMax = 500;
+
+export const getJobResponseAssessmentOneAssessmentEquipmentMax = 120;
+
+export const getJobResponseAssessmentOneAssessmentBrandMax = 120;
+
+export const getJobResponseAssessmentOneAssessmentModelMax = 120;
+
+export const getJobResponseAssessmentOneAssessmentPhotoContextCountMin = 0;
+
+export const getJobResponseAssessmentOneAssessmentCodesMax = 3;
+
+
+
 export const GetJobResponse = zod.object({
   "reference": zod.string(),
   "status": zod.string(),
   "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "intake": zod.object({
+  "description": zod.string(),
+  "trade": zod.string(),
+  "suburb": zod.string(),
+  "postcode": zod.string(),
+  "urgency": zod.string(),
+  "preferredTime": zod.string(),
+  "customerName": zod.string(),
+  "customerPhone": zod.string().nullish(),
+  "customerEmail": zod.string().nullish()
+}),
+  "assessment": zod.union([zod.object({
+  "outcome": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string().nullable(),
+  "safetyCodes": zod.array(zod.string()),
+  "assessment": zod.object({
+  "tradeClassification": zod.enum(['plumbing', 'electrical', 'heating_cooling', 'unsure']),
+  "urgencyClassification": zod.enum(['not_urgent', 'soon', 'today', 'emergency', 'unsure']),
+  "suburb": zod.string().max(getJobResponseAssessmentOneAssessmentSuburbMax).nullable(),
+  "postcode": zod.string().max(getJobResponseAssessmentOneAssessmentPostcodeMax).nullable(),
+  "preferredAttendanceTime": zod.string().max(getJobResponseAssessmentOneAssessmentPreferredAttendanceTimeMax).nullable(),
+  "neutralProblemSummary": zod.string().max(getJobResponseAssessmentOneAssessmentNeutralProblemSummaryMax).nullable(),
+  "equipment": zod.string().max(getJobResponseAssessmentOneAssessmentEquipmentMax).nullable(),
+  "brand": zod.string().max(getJobResponseAssessmentOneAssessmentBrandMax).nullable(),
+  "model": zod.string().max(getJobResponseAssessmentOneAssessmentModelMax).nullable(),
+  "photoContext": zod.object({
+  "provided": zod.boolean(),
+  "count": zod.number().min(getJobResponseAssessmentOneAssessmentPhotoContextCountMin)
+}),
+  "confidence": zod.enum(['low', 'medium', 'high']),
+  "codes": zod.array(zod.enum(['ROUTING_REVIEW', 'URGENCY_REVIEW', 'MANUAL_REVIEW_REQUIRED'])).max(getJobResponseAssessmentOneAssessmentCodesMax)
+}),
+  "createdAt": zod.string()
+}),zod.null()]).optional()
 })
 
 
@@ -102,6 +201,26 @@ export const UpdateJobParams = zod.object({
 export const UpdateJobBody = zod.object({
   "status": zod.string().optional()
 })
+
+export const updateJobResponseAssessmentOneAssessmentSuburbMax = 120;
+
+export const updateJobResponseAssessmentOneAssessmentPostcodeMax = 16;
+
+export const updateJobResponseAssessmentOneAssessmentPreferredAttendanceTimeMax = 160;
+
+export const updateJobResponseAssessmentOneAssessmentNeutralProblemSummaryMax = 500;
+
+export const updateJobResponseAssessmentOneAssessmentEquipmentMax = 120;
+
+export const updateJobResponseAssessmentOneAssessmentBrandMax = 120;
+
+export const updateJobResponseAssessmentOneAssessmentModelMax = 120;
+
+export const updateJobResponseAssessmentOneAssessmentPhotoContextCountMin = 0;
+
+export const updateJobResponseAssessmentOneAssessmentCodesMax = 3;
+
+
 
 export const UpdateJobResponse = zod.object({
   "id": zod.number(),
@@ -117,7 +236,131 @@ export const UpdateJobResponse = zod.object({
   "customerPhone": zod.string().nullish(),
   "customerEmail": zod.string().nullish(),
   "createdAt": zod.string(),
-  "images": zod.array(zod.string()).optional()
+  "images": zod.array(zod.string()).optional(),
+  "assessment": zod.union([zod.object({
+  "outcome": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string().nullable(),
+  "safetyCodes": zod.array(zod.string()),
+  "assessment": zod.object({
+  "tradeClassification": zod.enum(['plumbing', 'electrical', 'heating_cooling', 'unsure']),
+  "urgencyClassification": zod.enum(['not_urgent', 'soon', 'today', 'emergency', 'unsure']),
+  "suburb": zod.string().max(updateJobResponseAssessmentOneAssessmentSuburbMax).nullable(),
+  "postcode": zod.string().max(updateJobResponseAssessmentOneAssessmentPostcodeMax).nullable(),
+  "preferredAttendanceTime": zod.string().max(updateJobResponseAssessmentOneAssessmentPreferredAttendanceTimeMax).nullable(),
+  "neutralProblemSummary": zod.string().max(updateJobResponseAssessmentOneAssessmentNeutralProblemSummaryMax).nullable(),
+  "equipment": zod.string().max(updateJobResponseAssessmentOneAssessmentEquipmentMax).nullable(),
+  "brand": zod.string().max(updateJobResponseAssessmentOneAssessmentBrandMax).nullable(),
+  "model": zod.string().max(updateJobResponseAssessmentOneAssessmentModelMax).nullable(),
+  "photoContext": zod.object({
+  "provided": zod.boolean(),
+  "count": zod.number().min(updateJobResponseAssessmentOneAssessmentPhotoContextCountMin)
+}),
+  "confidence": zod.enum(['low', 'medium', 'high']),
+  "codes": zod.array(zod.enum(['ROUTING_REVIEW', 'URGENCY_REVIEW', 'MANUAL_REVIEW_REQUIRED'])).max(updateJobResponseAssessmentOneAssessmentCodesMax)
+}),
+  "createdAt": zod.string()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Correct customer-confirmed job details
+ */
+export const CorrectJobIntakeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const correctJobIntakeQueryTokenMin = 16;
+
+
+
+export const CorrectJobIntakeQueryParams = zod.object({
+  "token": zod.coerce.string().min(correctJobIntakeQueryTokenMin)
+})
+
+export const correctJobIntakeBodyDescriptionMin = 4;
+
+
+
+
+
+
+
+
+
+export const CorrectJobIntakeBody = zod.object({
+  "description": zod.string().min(correctJobIntakeBodyDescriptionMin),
+  "trade": zod.string().min(1),
+  "suburb": zod.string().min(1),
+  "postcode": zod.string().min(1),
+  "urgency": zod.string().min(1),
+  "preferredTime": zod.string().min(1),
+  "customerName": zod.string().min(1),
+  "customerPhone": zod.string().optional(),
+  "customerEmail": zod.string().optional()
+})
+
+export const correctJobIntakeResponseAssessmentOneAssessmentSuburbMax = 120;
+
+export const correctJobIntakeResponseAssessmentOneAssessmentPostcodeMax = 16;
+
+export const correctJobIntakeResponseAssessmentOneAssessmentPreferredAttendanceTimeMax = 160;
+
+export const correctJobIntakeResponseAssessmentOneAssessmentNeutralProblemSummaryMax = 500;
+
+export const correctJobIntakeResponseAssessmentOneAssessmentEquipmentMax = 120;
+
+export const correctJobIntakeResponseAssessmentOneAssessmentBrandMax = 120;
+
+export const correctJobIntakeResponseAssessmentOneAssessmentModelMax = 120;
+
+export const correctJobIntakeResponseAssessmentOneAssessmentPhotoContextCountMin = 0;
+
+export const correctJobIntakeResponseAssessmentOneAssessmentCodesMax = 3;
+
+
+
+export const CorrectJobIntakeResponse = zod.object({
+  "reference": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "intake": zod.object({
+  "description": zod.string(),
+  "trade": zod.string(),
+  "suburb": zod.string(),
+  "postcode": zod.string(),
+  "urgency": zod.string(),
+  "preferredTime": zod.string(),
+  "customerName": zod.string(),
+  "customerPhone": zod.string().nullish(),
+  "customerEmail": zod.string().nullish()
+}),
+  "assessment": zod.union([zod.object({
+  "outcome": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string().nullable(),
+  "safetyCodes": zod.array(zod.string()),
+  "assessment": zod.object({
+  "tradeClassification": zod.enum(['plumbing', 'electrical', 'heating_cooling', 'unsure']),
+  "urgencyClassification": zod.enum(['not_urgent', 'soon', 'today', 'emergency', 'unsure']),
+  "suburb": zod.string().max(correctJobIntakeResponseAssessmentOneAssessmentSuburbMax).nullable(),
+  "postcode": zod.string().max(correctJobIntakeResponseAssessmentOneAssessmentPostcodeMax).nullable(),
+  "preferredAttendanceTime": zod.string().max(correctJobIntakeResponseAssessmentOneAssessmentPreferredAttendanceTimeMax).nullable(),
+  "neutralProblemSummary": zod.string().max(correctJobIntakeResponseAssessmentOneAssessmentNeutralProblemSummaryMax).nullable(),
+  "equipment": zod.string().max(correctJobIntakeResponseAssessmentOneAssessmentEquipmentMax).nullable(),
+  "brand": zod.string().max(correctJobIntakeResponseAssessmentOneAssessmentBrandMax).nullable(),
+  "model": zod.string().max(correctJobIntakeResponseAssessmentOneAssessmentModelMax).nullable(),
+  "photoContext": zod.object({
+  "provided": zod.boolean(),
+  "count": zod.number().min(correctJobIntakeResponseAssessmentOneAssessmentPhotoContextCountMin)
+}),
+  "confidence": zod.enum(['low', 'medium', 'high']),
+  "codes": zod.array(zod.enum(['ROUTING_REVIEW', 'URGENCY_REVIEW', 'MANUAL_REVIEW_REQUIRED'])).max(correctJobIntakeResponseAssessmentOneAssessmentCodesMax)
+}),
+  "createdAt": zod.string()
+}),zod.null()]).optional()
 })
 
 
@@ -238,6 +481,26 @@ export const GetAdminSummaryResponse = zod.object({
 /**
  * @summary List jobs awaiting dispatch
  */
+export const listJobsAwaitingDispatchResponseAssessmentOneAssessmentSuburbMax = 120;
+
+export const listJobsAwaitingDispatchResponseAssessmentOneAssessmentPostcodeMax = 16;
+
+export const listJobsAwaitingDispatchResponseAssessmentOneAssessmentPreferredAttendanceTimeMax = 160;
+
+export const listJobsAwaitingDispatchResponseAssessmentOneAssessmentNeutralProblemSummaryMax = 500;
+
+export const listJobsAwaitingDispatchResponseAssessmentOneAssessmentEquipmentMax = 120;
+
+export const listJobsAwaitingDispatchResponseAssessmentOneAssessmentBrandMax = 120;
+
+export const listJobsAwaitingDispatchResponseAssessmentOneAssessmentModelMax = 120;
+
+export const listJobsAwaitingDispatchResponseAssessmentOneAssessmentPhotoContextCountMin = 0;
+
+export const listJobsAwaitingDispatchResponseAssessmentOneAssessmentCodesMax = 3;
+
+
+
 export const ListJobsAwaitingDispatchResponseItem = zod.object({
   "id": zod.number(),
   "reference": zod.string(),
@@ -252,9 +515,50 @@ export const ListJobsAwaitingDispatchResponseItem = zod.object({
   "customerPhone": zod.string().nullish(),
   "customerEmail": zod.string().nullish(),
   "createdAt": zod.string(),
-  "images": zod.array(zod.string()).optional()
+  "images": zod.array(zod.string()).optional(),
+  "assessment": zod.union([zod.object({
+  "outcome": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string().nullable(),
+  "safetyCodes": zod.array(zod.string()),
+  "assessment": zod.object({
+  "tradeClassification": zod.enum(['plumbing', 'electrical', 'heating_cooling', 'unsure']),
+  "urgencyClassification": zod.enum(['not_urgent', 'soon', 'today', 'emergency', 'unsure']),
+  "suburb": zod.string().max(listJobsAwaitingDispatchResponseAssessmentOneAssessmentSuburbMax).nullable(),
+  "postcode": zod.string().max(listJobsAwaitingDispatchResponseAssessmentOneAssessmentPostcodeMax).nullable(),
+  "preferredAttendanceTime": zod.string().max(listJobsAwaitingDispatchResponseAssessmentOneAssessmentPreferredAttendanceTimeMax).nullable(),
+  "neutralProblemSummary": zod.string().max(listJobsAwaitingDispatchResponseAssessmentOneAssessmentNeutralProblemSummaryMax).nullable(),
+  "equipment": zod.string().max(listJobsAwaitingDispatchResponseAssessmentOneAssessmentEquipmentMax).nullable(),
+  "brand": zod.string().max(listJobsAwaitingDispatchResponseAssessmentOneAssessmentBrandMax).nullable(),
+  "model": zod.string().max(listJobsAwaitingDispatchResponseAssessmentOneAssessmentModelMax).nullable(),
+  "photoContext": zod.object({
+  "provided": zod.boolean(),
+  "count": zod.number().min(listJobsAwaitingDispatchResponseAssessmentOneAssessmentPhotoContextCountMin)
+}),
+  "confidence": zod.enum(['low', 'medium', 'high']),
+  "codes": zod.array(zod.enum(['ROUTING_REVIEW', 'URGENCY_REVIEW', 'MANUAL_REVIEW_REQUIRED'])).max(listJobsAwaitingDispatchResponseAssessmentOneAssessmentCodesMax)
+}),
+  "createdAt": zod.string()
+}),zod.null()])
 })
 export const ListJobsAwaitingDispatchResponse = zod.array(ListJobsAwaitingDispatchResponseItem)
+
+
+/**
+ * @summary List deterministic partner recommendations without creating offers
+ */
+export const GetPartnerRecommendationsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetPartnerRecommendationsResponseItem = zod.object({
+  "partnerId": zod.number(),
+  "score": zod.number(),
+  "eligible": zod.boolean(),
+  "codes": zod.array(zod.string()),
+  "disqualifications": zod.array(zod.string())
+})
+export const GetPartnerRecommendationsResponse = zod.array(GetPartnerRecommendationsResponseItem)
 
 
 /**

@@ -20,6 +20,7 @@ Required environment variables:
 - API runtime: `PORT=8080`
 - Web runtime: `PORT=24974`, `BASE_PATH=/`
 - Optional for local development: `API_PROXY_TARGET=http://127.0.0.1:8080`
+- Optional server-only AI review: `OPENAI_API_KEY` and `OPENAI_MODEL`. There is deliberately no code default for `OPENAI_MODEL`; select and set the approved model in the API environment. If either value is absent or the provider fails, intake continues with a typed manual-review fallback.
 
 ## Stack
 
@@ -45,6 +46,7 @@ Required environment variables:
 - Authentication is intentionally deferred to a later phase.
 - Customer contact details are not returned in partner opportunity views; partner-facing demo data is intentionally limited until acceptance.
 - Safety-sensitive language stops ordinary flow and directs users to emergency services rather than attempting diagnosis.
+- Phase 4 stores immutable customer-confirmed intake snapshots and append-only AI assessments. Deterministic safety classification runs before any provider request; AI review never changes customer-confirmed values or dispatches work.
 
 ## Product
 

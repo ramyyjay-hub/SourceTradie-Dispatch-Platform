@@ -22,6 +22,13 @@
       "when": 1787529600000,
       "tag": "0002_phase3_dispatch_lifecycle",
       "breakpoints": false
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787533200000,
+      "tag": "0003_phase4_safe_intake_ai",
+      "breakpoints": false
     }
   ]
 }

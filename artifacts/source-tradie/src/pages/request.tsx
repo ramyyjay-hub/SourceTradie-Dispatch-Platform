@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -14,6 +15,7 @@ import {
 import { Link, useLocation, useParams } from 'wouter';
 import {
   getGetJobQueryKey,
+  useCorrectJobIntake,
   useCreateJob,
   useGetJob,
 } from '@workspace/api-client-react';
@@ -64,7 +66,7 @@ function RequestFlow({ onSubmitted }: { onSubmitted: (job: CreateJobResponse) =>
   const [error, setError] = useState('');
   const createJob = useCreateJob();
   const urgentSignal = useMemo(
-    () => /gas|smell|smoke|fire|sparking|burst|flooding|carbon monoxide/i.test(form.description),
+    () => /\b(?:smell(?:ing)?\s+(?:of\s+)?gas|gas\s+smell|sparks?|sparking|electrical\s+fire|(?:exposed\s+)?live\s+(?:wire|wiring)|major\s+flood(?:ing)?|severe\s+flood(?:ing)?|immediate\s+danger)\b/i.test(form.description),
     [form.description],
   );
 
@@ -603,7 +605,95 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
             <p className="mt-3 text-lg font-medium">{new Date(job.updatedAt).toLocaleString()}</p>
           </div>
         </div>
+        {job.assessment && (
+          <div className={`mt-4 rounded-2xl border p-5 ${job.assessment.safetyCodes.length ? 'border-[hsl(var(--destructive)/.35)] bg-[hsl(var(--destructive)/.06)]' : 'border-[hsl(var(--border))] bg-[hsl(var(--card))]'}`}>
+            <p className="font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">Safety and review</p>
+            <p className="mt-2 text-sm font-semibold">Your request is queued for review.</p>
+            {job.assessment.safetyCodes.length > 0 && (
+              <p className="mt-2 text-xs text-[hsl(var(--destructive))]">
+                Immediate safety guidance applies: {job.assessment.safetyCodes.join(' · ')}.
+              </p>
+            )}
+            {job.assessment.outcome !== 'success' && job.assessment.outcome !== 'safety_override' && (
+              <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+                Automated review is unavailable; your request remains available for manual review.
+              </p>
+            )}
+          </div>
+        )}
+        <CorrectionPanel id={id} token={requestToken} intake={job.intake} />
       </main>
     </div>
+  );
+}
+
+function CorrectionPanel({
+  id,
+  token,
+  intake,
+}: {
+  id: number;
+  token: string;
+  intake: {
+    description: string;
+    trade: string;
+    suburb: string;
+    postcode: string;
+    urgency: string;
+    preferredTime: string;
+    customerName: string;
+    customerPhone?: string | null;
+    customerEmail?: string | null;
+  };
+}) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    ...intake,
+    customerPhone: intake.customerPhone ?? '',
+    customerEmail: intake.customerEmail ?? '',
+  });
+  const correction = useCorrectJobIntake({
+    mutation: {
+      onSuccess: (updated) => {
+        queryClient.setQueryData(getGetJobQueryKey(id, { token }), updated);
+        setEditing(false);
+      },
+    },
+  });
+  const update = (key: keyof typeof form, value: string) =>
+    setForm((current) => ({ ...current, [key]: value }));
+
+  return (
+    <section className="mt-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">Customer-confirmed details</p>
+          <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">These values are used for your request. Corrections are recorded as a new confirmation.</p>
+        </div>
+        <button className="btn-quiet border border-[hsl(var(--border))] text-xs" onClick={() => setEditing((value) => !value)} data-testid="button-correct-request">
+          {editing ? 'Cancel' : 'Review or correct'}
+        </button>
+      </div>
+      {editing && (
+        <div className="mt-5 space-y-3">
+          <textarea className="field min-h-24" value={form.description} onChange={(event) => update('description', event.target.value)} aria-label="Correct request description" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input className="field" value={form.trade} onChange={(event) => update('trade', event.target.value)} aria-label="Correct trade" />
+            <input className="field" value={form.urgency} onChange={(event) => update('urgency', event.target.value)} aria-label="Correct urgency" />
+            <input className="field" value={form.suburb} onChange={(event) => update('suburb', event.target.value)} aria-label="Correct suburb" />
+            <input className="field" value={form.postcode} onChange={(event) => update('postcode', event.target.value)} aria-label="Correct postcode" />
+            <input className="field" value={form.preferredTime} onChange={(event) => update('preferredTime', event.target.value)} aria-label="Correct preferred time" />
+            <input className="field" value={form.customerName} onChange={(event) => update('customerName', event.target.value)} aria-label="Correct customer name" />
+            <input className="field" value={form.customerPhone} onChange={(event) => update('customerPhone', event.target.value)} aria-label="Correct customer phone" />
+            <input className="field" value={form.customerEmail} onChange={(event) => update('customerEmail', event.target.value)} aria-label="Correct customer email" />
+          </div>
+          {correction.isError && <p className="text-sm text-[hsl(var(--destructive))]">We couldn’t save those corrections. Your original request is unchanged.</p>}
+          <button className="btn-accent" disabled={correction.isPending} onClick={() => correction.mutate({ id, params: { token }, data: form })} data-testid="button-save-request-correction">
+            {correction.isPending ? 'Saving correction…' : 'Save correction'}
+          </button>
+        </div>
+      )}
+    </section>
   );
 }

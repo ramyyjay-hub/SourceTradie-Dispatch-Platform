@@ -31,6 +31,18 @@ const DispatchOfferIdParams = z.object({
   id: z.coerce.number().int().positive(),
 });
 
+const JobIntakeCorrectionBody = z.object({
+  description: z.string().trim().min(4),
+  trade: z.string().trim().min(1),
+  suburb: z.string().trim().min(1),
+  postcode: z.string().trim().min(1),
+  urgency: z.string().trim().min(1),
+  preferredTime: z.string().trim().min(1),
+  customerName: z.string().trim().min(1),
+  customerPhone: z.string().trim().optional(),
+  customerEmail: z.string().trim().email().optional().or(z.literal("")),
+});
+
 export function createSourceTradieRouter(database: DbLike): IRouter {
   const router: IRouter = Router();
   const repository = new SourceTradieRepository(database);
@@ -72,6 +84,18 @@ router.get("/jobs/:id", async (req, res) => {
   return res.json(job);
 });
 
+router.patch("/jobs/:id/intake", async (req, res) => {
+  const params = GetJobParams.safeParse(req.params);
+  const body = JobIntakeCorrectionBody.safeParse(req.body);
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  if (!params.success || !body.success || !token) {
+    return res.status(400).json({ error: "Valid request details and status token are required." });
+  }
+  const job = await repository.correctJobIntake(params.data.id, token, body.data);
+  if (!job) return res.status(404).json({ error: "Job not found." });
+  return res.json(job);
+});
+
 router.get("/jobs", authRequired, requireAdmin, async (_req, res) => {
   const jobs = await repository.listJobs();
   res.json(jobs);
@@ -83,6 +107,21 @@ router.get(
   requireAdmin,
   async (_req, res) => {
     res.json(await repository.listJobsAwaitingDispatch());
+  },
+);
+
+router.get(
+  "/admin/jobs/:id/partner-recommendations",
+  authRequired,
+  requireAdmin,
+  async (req, res) => {
+    const parsed = GetJobParams.safeParse(req.params);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid job identifier." });
+    }
+    const recommendations = await repository.getPartnerRecommendations(parsed.data.id);
+    if (!recommendations) return res.status(404).json({ error: "Job not found." });
+    return res.json(recommendations);
   },
 );
 

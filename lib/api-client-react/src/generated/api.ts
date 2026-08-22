@@ -22,6 +22,7 @@ import type {
 import type {
   AdminSummary,
   AvailabilityInput,
+  CorrectJobIntakeParams,
   CreateJobResponse,
   Dispatch,
   DispatchDecisionInput,
@@ -31,11 +32,13 @@ import type {
   HealthStatus,
   Job,
   JobInput,
+  JobIntakeCorrection,
   JobUpdate,
   ListApprovedPartnersParams,
   Partner,
   PartnerInput,
   PartnerOffer,
+  PartnerRecommendation,
   PublicJobStatus
 } from './api.schemas';
 
@@ -451,6 +454,87 @@ export const useUpdateJob = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getUpdateJobMutationOptions(options));
+    }
+
+export const getCorrectJobIntakeUrl = (id: number,
+    params: CorrectJobIntakeParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/jobs/${id}/intake?${stringifiedParams}` : `/api/jobs/${id}/intake`
+}
+
+/**
+ * @summary Correct customer-confirmed job details
+ */
+export const correctJobIntake = async (id: number,
+    jobIntakeCorrection: JobIntakeCorrection,
+    params: CorrectJobIntakeParams, options?: Parameters<typeof customFetch>[1]): Promise<PublicJobStatus> => {
+
+  return customFetch<PublicJobStatus>(getCorrectJobIntakeUrl(id,params),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(jobIntakeCorrection)
+  }
+);}
+
+
+
+
+
+export const getCorrectJobIntakeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctJobIntake>>, TError,{id: number;data: BodyType<JobIntakeCorrection>;params: CorrectJobIntakeParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof correctJobIntake>>, TError,{id: number;data: BodyType<JobIntakeCorrection>;params: CorrectJobIntakeParams}, TContext> => {
+
+const mutationKey = ['correctJobIntake'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof correctJobIntake>>, {id: number;data: BodyType<JobIntakeCorrection>;params: CorrectJobIntakeParams}> = (props) => {
+          const {id,data,params} = props ?? {};
+
+          return  correctJobIntake(id,data,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CorrectJobIntakeMutationResult = NonNullable<Awaited<ReturnType<typeof correctJobIntake>>>
+    export type CorrectJobIntakeMutationBody = BodyType<JobIntakeCorrection>
+    export type CorrectJobIntakeMutationError = ErrorType<void>
+
+    /**
+ * @summary Correct customer-confirmed job details
+ */
+export const useCorrectJobIntake = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctJobIntake>>, TError,{id: number;data: BodyType<JobIntakeCorrection>;params: CorrectJobIntakeParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof correctJobIntake>>,
+        TError,
+        {id: number;data: BodyType<JobIntakeCorrection>;params: CorrectJobIntakeParams},
+        TContext
+      > => {
+      return useMutation(getCorrectJobIntakeMutationOptions(options));
     }
 
 export const getListPartnersUrl = () => {
@@ -887,6 +971,83 @@ export function useListJobsAwaitingDispatch<TData = Awaited<ReturnType<typeof li
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListJobsAwaitingDispatchQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPartnerRecommendationsUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/jobs/${id}/partner-recommendations`
+}
+
+/**
+ * @summary List deterministic partner recommendations without creating offers
+ */
+export const getPartnerRecommendations = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<PartnerRecommendation[]> => {
+
+  return customFetch<PartnerRecommendation[]>(getGetPartnerRecommendationsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPartnerRecommendationsQueryKey = (id: number,) => {
+    return [
+    `/api/admin/jobs/${id}/partner-recommendations`
+    ] as const;
+    }
+
+
+export const getGetPartnerRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof getPartnerRecommendations>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPartnerRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPartnerRecommendationsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPartnerRecommendations>>> = ({ signal }) => getPartnerRecommendations(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPartnerRecommendations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPartnerRecommendationsQueryResult = NonNullable<Awaited<ReturnType<typeof getPartnerRecommendations>>>
+export type GetPartnerRecommendationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List deterministic partner recommendations without creating offers
+ */
+
+export function useGetPartnerRecommendations<TData = Awaited<ReturnType<typeof getPartnerRecommendations>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPartnerRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPartnerRecommendationsQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -114,6 +114,32 @@ paths:
         "403":
           description: Forbidden
 
+  /jobs/{id}/intake:
+    patch:
+      operationId: correctJobIntake
+      tags: [jobs]
+      summary: Correct customer-confirmed job details
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/JobStatusToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobIntakeCorrection"
+      responses:
+        "200":
+          description: Corrected request status and current intake
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicJobStatus"
+        "401":
+          description: Missing or invalid token
+        "404":
+          description: Job not found
+
   /partners:
     get:
       operationId: listPartners
@@ -242,6 +268,25 @@ paths:
                 items:
                   $ref: "#/components/schemas/Job"
 
+  /admin/jobs/{id}/partner-recommendations:
+    get:
+      operationId: getPartnerRecommendations
+      tags: [admin]
+      summary: List deterministic partner recommendations without creating offers
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Ranked partner recommendations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PartnerRecommendation"
+
   /admin/approved-partners:
     get:
       operationId: listApprovedPartners
@@ -366,7 +411,7 @@ components:
 
     Job:
       type: object
-      required: [id, reference, description, trade, suburb, postcode, urgency, preferredTime, status, createdAt]
+      required: [id, reference, description, trade, suburb, postcode, urgency, preferredTime, status, createdAt, assessment]
       properties:
         id: { type: number }
         reference: { type: string }
@@ -384,6 +429,10 @@ components:
         images:
           type: array
           items: { type: string }
+        assessment:
+          anyOf:
+            - $ref: "#/components/schemas/JobAssessment"
+            - type: "null"
 
     CreateJobResponse:
       type: object
@@ -398,12 +447,18 @@ components:
 
     PublicJobStatus:
       type: object
-      required: [reference, status, createdAt, updatedAt]
+      required: [reference, status, createdAt, updatedAt, intake]
       properties:
         reference: { type: string }
         status: { type: string }
         createdAt: { type: string }
         updatedAt: { type: string }
+        intake:
+          $ref: "#/components/schemas/CustomerConfirmedIntake"
+        assessment:
+          anyOf:
+            - $ref: "#/components/schemas/JobAssessment"
+            - type: "null"
 
     JobInput:
       type: object
@@ -426,6 +481,104 @@ components:
       type: object
       properties:
         status: { type: string }
+
+    JobIntakeCorrection:
+      type: object
+      required: [description, trade, suburb, postcode, urgency, preferredTime, customerName]
+      properties:
+        description: { type: string, minLength: 4 }
+        trade: { type: string, minLength: 1 }
+        suburb: { type: string, minLength: 1 }
+        postcode: { type: string, minLength: 1 }
+        urgency: { type: string, minLength: 1 }
+        preferredTime: { type: string, minLength: 1 }
+        customerName: { type: string, minLength: 1 }
+        customerPhone: { type: string }
+        customerEmail: { type: string }
+
+    CustomerConfirmedIntake:
+      type: object
+      required: [description, trade, suburb, postcode, urgency, preferredTime, customerName]
+      properties:
+        description: { type: string }
+        trade: { type: string }
+        suburb: { type: string }
+        postcode: { type: string }
+        urgency: { type: string }
+        preferredTime: { type: string }
+        customerName: { type: string }
+        customerPhone: { type: ["string", "null"] }
+        customerEmail: { type: ["string", "null"] }
+
+    JobAssessment:
+      type: object
+      required: [outcome, provider, model, safetyCodes, assessment, createdAt]
+      properties:
+        outcome: { type: string }
+        provider: { type: string }
+        model: { type: ["string", "null"] }
+        safetyCodes:
+          type: array
+          items: { type: string }
+        assessment:
+          $ref: "#/components/schemas/JobIntakeAssessmentDraft"
+        createdAt: { type: string }
+
+    TradeClassification:
+      type: string
+      enum: [plumbing, electrical, heating_cooling, unsure]
+
+    UrgencyClassification:
+      type: string
+      enum: [not_urgent, soon, today, emergency, unsure]
+
+    PhotoContext:
+      type: object
+      additionalProperties: false
+      required: [provided, count]
+      properties:
+        provided: { type: boolean }
+        count: { type: number, minimum: 0 }
+
+    JobIntakeAssessmentDraft:
+      type: object
+      additionalProperties: false
+      required:
+        - tradeClassification
+        - urgencyClassification
+        - suburb
+        - postcode
+        - preferredAttendanceTime
+        - neutralProblemSummary
+        - equipment
+        - brand
+        - model
+        - photoContext
+        - confidence
+        - codes
+      properties:
+        tradeClassification:
+          $ref: "#/components/schemas/TradeClassification"
+        urgencyClassification:
+          $ref: "#/components/schemas/UrgencyClassification"
+        suburb: { type: ["string", "null"], maxLength: 120 }
+        postcode: { type: ["string", "null"], maxLength: 16 }
+        preferredAttendanceTime: { type: ["string", "null"], maxLength: 160 }
+        neutralProblemSummary: { type: ["string", "null"], maxLength: 500 }
+        equipment: { type: ["string", "null"], maxLength: 120 }
+        brand: { type: ["string", "null"], maxLength: 120 }
+        model: { type: ["string", "null"], maxLength: 120 }
+        photoContext:
+          $ref: "#/components/schemas/PhotoContext"
+        confidence:
+          type: string
+          enum: [low, medium, high]
+        codes:
+          type: array
+          maxItems: 3
+          items:
+            type: string
+            enum: [ROUTING_REVIEW, URGENCY_REVIEW, MANUAL_REVIEW_REQUIRED]
 
     Partner:
       type: object
@@ -534,6 +687,20 @@ components:
         customerEmail: { type: ["string", "null"] }
         createdAt: { type: string }
         updatedAt: { type: string }
+
+    PartnerRecommendation:
+      type: object
+      required: [partnerId, score, eligible, codes, disqualifications]
+      properties:
+        partnerId: { type: number }
+        score: { type: number }
+        eligible: { type: boolean }
+        codes:
+          type: array
+          items: { type: string }
+        disqualifications:
+          type: array
+          items: { type: string }
 
     AdminSummary:
       type: object

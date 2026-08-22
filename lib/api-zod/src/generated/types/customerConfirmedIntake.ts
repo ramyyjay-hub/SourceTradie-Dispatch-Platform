@@ -5,24 +5,17 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { JobAssessment } from './jobAssessment';
 
-export interface Job {
-  id: number;
-  reference: string;
+export interface CustomerConfirmedIntake {
   description: string;
   trade: string;
   suburb: string;
   postcode: string;
   urgency: string;
   preferredTime: string;
-  status: string;
-  customerName?: string;
+  customerName: string;
   /** @nullable */
   customerPhone?: string | null;
   /** @nullable */
   customerEmail?: string | null;
-  createdAt: string;
-  images?: string[];
-  assessment: JobAssessment | null;
 }

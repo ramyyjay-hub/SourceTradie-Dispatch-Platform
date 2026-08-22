@@ -2,6 +2,7 @@ import {
 	boolean,
 	index,
 	integer,
+	jsonb,
 	pgEnum,
 	pgTable,
 	text,
@@ -107,6 +108,52 @@ export const jobImagesTable = pgTable(
 	(table) => [
 		index("job_images_job_id_idx").on(table.jobId),
 		uniqueIndex("job_images_job_id_name_uidx").on(table.jobId, table.imageName),
+	],
+);
+
+export const jobIntakeSubmissionsTable = pgTable(
+	"job_intake_submissions",
+	{
+		id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+		jobId: integer("job_id")
+			.notNull()
+			.references(() => jobsTable.id, { onDelete: "cascade" }),
+		customerConfirmedValues: jsonb("customer_confirmed_values")
+			.$type<Record<string, unknown>>()
+			.notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(table) => [
+		index("job_intake_submissions_job_id_idx").on(table.jobId),
+		index("job_intake_submissions_created_at_idx").on(table.createdAt),
+	],
+);
+
+export const jobAiAssessmentsTable = pgTable(
+	"job_ai_assessments",
+	{
+		id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+		jobId: integer("job_id")
+			.notNull()
+			.references(() => jobsTable.id, { onDelete: "cascade" }),
+		submissionId: integer("submission_id")
+			.notNull()
+			.references(() => jobIntakeSubmissionsTable.id, { onDelete: "cascade" }),
+		provider: text("provider").notNull(),
+		model: text("model"),
+		outcome: text("outcome").notNull(),
+		safetyCodes: jsonb("safety_codes").$type<string[]>().notNull(),
+		assessment: jsonb("assessment").$type<Record<string, unknown>>().notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(table) => [
+		index("job_ai_assessments_job_id_idx").on(table.jobId),
+		index("job_ai_assessments_submission_id_idx").on(table.submissionId),
+		index("job_ai_assessments_created_at_idx").on(table.createdAt),
 	],
 );
 

@@ -5,10 +5,14 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CustomerConfirmedIntake } from './customerConfirmedIntake';
+import type { JobAssessment } from './jobAssessment';
 
 export interface PublicJobStatus {
   reference: string;
   status: string;
   createdAt: string;
   updatedAt: string;
+  intake: CustomerConfirmedIntake;
+  assessment?: JobAssessment | null;
 }
