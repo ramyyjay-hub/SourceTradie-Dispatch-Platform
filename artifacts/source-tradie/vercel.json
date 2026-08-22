@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://sourcetradie-api.vercel.app/api/:path*"
+      "destination": "https://source-tradie-dispatch-platform-api.vercel.app/api/:path*"
     },
     { "source": "/:path*", "destination": "/index.html" }
   ],
