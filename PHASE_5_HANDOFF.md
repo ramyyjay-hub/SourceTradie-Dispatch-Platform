@@ -6,6 +6,12 @@ Current checkpoint: `b1ed872` (`Fix conditional safety request flow`).
 
 The working tree was clean when this handoff was created.
 
+## Canonical development workspace
+
+Use the local `_repo_test_clone` workspace as the canonical development
+workspace for subsequent work. Do not continue from another SourceTradie or
+Replit clone, which may be stale.
+
 ## Product direction
 
 SourceTradie is **not** a bidding or lead marketplace. It is a managed
