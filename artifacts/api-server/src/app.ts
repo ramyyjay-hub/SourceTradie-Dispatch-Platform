@@ -26,10 +26,26 @@ app.use(
   }),
 );
 
-const corsOrigin = process.env["CORS_ORIGIN"];
+const configuredCorsOrigins = (process.env["CORS_ORIGIN"] ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const allowedCorsOrigins = new Set(
+  configuredCorsOrigins.length > 0
+    ? configuredCorsOrigins
+    : process.env.NODE_ENV === "production"
+      ? ["https://sourcetradie.com.au"]
+      : [],
+);
 app.use(
   cors({
-    origin: corsOrigin ? corsOrigin : true,
+    origin(origin, callback) {
+      if (!origin || process.env.NODE_ENV !== "production") {
+        callback(null, true);
+        return;
+      }
+      callback(null, allowedCorsOrigins.has(origin));
+    },
     credentials: true,
   }),
 );
