@@ -9,16 +9,16 @@ export default function Home() {
       <PublicNav />
       <main>
         <section className="paper-grid relative">
-          <div className="content-wrap grid items-center gap-8 py-10 md:min-h-[560px] md:grid-cols-[1.1fr_.9fr] md:gap-10 md:py-10">
+          <div className="content-wrap grid items-center gap-8 py-10 md:min-h-[500px] md:grid-cols-[1.1fr_.9fr] md:gap-10 md:py-6 lg:min-h-[520px] lg:py-8">
             <div className="animate-rise">
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] px-3 py-1.5 font-mono-ui text-[10px] uppercase tracking-[.14em] text-[hsl(var(--secondary))]"><span className="status-dot" /> Melbourne, made local</div>
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] px-3 py-1.5 font-mono-ui text-[10px] uppercase tracking-[.14em] text-[hsl(var(--secondary))] md:mb-4"><span className="status-dot" /> Melbourne, made local</div>
               <h1 className="max-w-3xl text-[clamp(3.5rem,9vw,7.9rem)] font-bold leading-[.87] tracking-[-.085em]">A better way to get a <span className="font-display font-normal italic text-[hsl(var(--secondary))]">tradie.</span></h1>
-              <p className="mt-6 max-w-lg text-lg leading-8 text-[hsl(var(--muted-foreground))]">Tell us what’s going on at home. We’ll ask the right questions, flag anything unsafe, and put your request in front of the right local people.</p>
-              <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <p className="mt-6 max-w-lg text-lg leading-8 text-[hsl(var(--muted-foreground))] md:mt-5">Tell us what’s going on at home. We’ll ask the right questions, flag anything unsafe, and put your request in front of the right local people.</p>
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row md:mt-6">
                 <Link href="/request" className="btn-accent" data-testid="link-home-request">Source a Tradie <ArrowRight size={17} /></Link>
                 <Link href="/partner" className="btn-quiet border border-[hsl(var(--border))]" data-testid="link-home-partner">I’m a tradie</Link>
               </div>
-              <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3 font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]"><span className="flex items-center gap-2"><MapPin size={14} /> Melbourne pilot</span><span className="flex items-center gap-2"><UsersRound size={14} /> Qualified local matching</span></div>
+              <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3 font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))] md:mt-5"><span className="flex items-center gap-2"><MapPin size={14} /> Melbourne pilot</span><span className="flex items-center gap-2"><UsersRound size={14} /> Qualified local matching</span></div>
             </div>
             <div className="relative animate-rise [animation-delay:120ms]">
               <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-[hsl(var(--accent)/.18)] blur-3xl" />
@@ -31,7 +31,7 @@ export default function Home() {
             </div>
           </div>
         </section>
-        <section className="content-wrap py-20 md:py-28">
+        <section className="content-wrap py-20 md:py-20">
           <div className="grid gap-10 md:grid-cols-[.7fr_1.3fr]"><div><p className="font-mono-ui text-[10px] uppercase tracking-[.16em] text-[hsl(var(--secondary))]">How it works</p><h2 className="mt-4 max-w-sm text-4xl font-bold leading-[.98] tracking-[-.065em] md:text-5xl">Less chasing. More sorted.</h2></div><div className="grid gap-4 sm:grid-cols-3"><Process index="01" title="Say it plainly" detail="No trade jargon needed. A few honest words are enough to start." /><Process index="02" title="We qualify it" detail="We surface safety concerns and the details a good tradie needs." /><Process index="03" title="You stay informed" detail="See the real sourcing stage. Never a made-up match or mystery wait." /></div></div>
         </section>
         <section className="bg-[hsl(var(--primary))] py-20 text-[hsl(var(--primary-foreground))] md:py-28">
