@@ -28,6 +28,7 @@ import {
   StepIndicator,
 } from "@/components/source-ui";
 import { extractExplicitPreferredTime } from "@/lib/intake-time";
+import { getCustomerLifecyclePresentation } from "@/lib/customer-lifecycle";
 import {
   getNextRequestFlowStep,
   getPreviousRequestFlowStep,
@@ -661,19 +662,7 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
     );
   }
 
-  const stages = [
-    "Request received",
-    "Details being reviewed",
-    "Local sourcing",
-    "Tradie confirmed",
-  ];
-  const activeStage =
-    job.status.toLowerCase().includes("complete") ||
-    job.status.toLowerCase().includes("accept")
-      ? 3
-      : job.status.toLowerCase().includes("dispatch")
-        ? 2
-        : 1;
+  const lifecycle = getCustomerLifecyclePresentation(job.status);
 
   return (
     <div className="min-h-[100dvh]">
@@ -701,34 +690,34 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
                 Current status
               </p>
               <h2 className="mt-2 text-2xl font-bold">
-                Request is being reviewed
+                {lifecycle.title}
               </h2>
             </div>
             <Clock3 className="text-[hsl(var(--accent))]" size={28} />
           </div>
 
           <div className="mt-9 space-y-5">
-            {stages.map((stage, index) => (
+            {lifecycle.stages.map((stage, index) => (
               <div key={stage} className="flex items-center gap-4">
                 <div
                   className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border ${
-                    index <= activeStage
+                    index <= lifecycle.activeStage
                       ? "border-[hsl(var(--accent))] bg-[hsl(var(--accent))] text-[hsl(var(--primary))]"
                       : "border-[hsl(var(--primary-foreground)/.25)] text-[hsl(var(--primary-foreground)/.4)]"
                   }`}
                 >
-                  {index < activeStage ? <Check size={15} /> : index + 1}
+                  {index < lifecycle.activeStage ? <Check size={15} /> : index + 1}
                 </div>
                 <span
                   className={
-                    index <= activeStage
+                    index <= lifecycle.activeStage
                       ? "font-semibold"
                       : "text-[hsl(var(--primary-foreground)/.45)]"
                   }
                 >
                   {stage}
                 </span>
-                {index === activeStage && (
+                {index === lifecycle.activeStage && (
                   <span className="ml-auto rounded-full bg-[hsl(var(--primary-foreground)/.1)] px-2 py-1 font-mono-ui text-[9px] uppercase tracking-[.1em] text-[hsl(var(--accent))]">
                     Now
                   </span>
@@ -768,10 +757,10 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
             className={`mt-4 rounded-2xl border p-5 ${job.assessment.safetyCodes.length ? "border-[hsl(var(--destructive)/.35)] bg-[hsl(var(--destructive)/.06)]" : "border-[hsl(var(--border))] bg-[hsl(var(--card))]"}`}
           >
             <p className="font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">
-              Safety and review
+              {lifecycle.assessmentLabel}
             </p>
             <p className="mt-2 text-sm font-semibold">
-              Your request is queued for review.
+              {lifecycle.assessmentMessage}
             </p>
             {job.assessment.safetyCodes.length > 0 && (
               <p className="mt-2 text-xs text-[hsl(var(--destructive))]">
