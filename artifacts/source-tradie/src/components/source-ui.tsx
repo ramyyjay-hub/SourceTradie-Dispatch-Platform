@@ -5,13 +5,24 @@ import type { ReactNode } from 'react';
 export function Brand({ inverse = false }: { inverse?: boolean }) {
   return (
     <Link href="/" className="inline-flex items-center gap-3" data-testid="link-brand">
-      <span className={`grid h-10 w-10 place-items-center rounded-[13px] ${inverse ? 'bg-[hsl(var(--accent))] text-[hsl(var(--primary))]' : 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'}`}>
-        <Wrench size={20} strokeWidth={2.4} />
-      </span>
+      <BrandDrillMark />
       <span className={`text-lg font-bold tracking-[-.04em] ${inverse ? 'text-[hsl(var(--sidebar-foreground))]' : ''}`}>
         Source<span className="text-[hsl(var(--accent))]">Tradie</span>
       </span>
     </Link>
+  );
+}
+
+function BrandDrillMark() {
+  return (
+    <svg aria-hidden="true" className="h-10 w-10 shrink-0" viewBox="0 0 180 180" fill="none">
+      <rect width="180" height="180" rx="42" fill="#20363C" />
+      <path d="M38 56h82a10 10 0 0 1 10 10v5h15v25h-15v3a10 10 0 0 1-10 10H38a8 8 0 0 1-8-8V64a8 8 0 0 1 8-8Z" fill="#F8F3EA" />
+      <path d="M72 104h36l13 38H91L72 104Z" fill="#F8F3EA" />
+      <rect x="87" y="136" width="40" height="16" rx="5" fill="#F8F3EA" />
+      <path d="M145 79h16" stroke="#E4833D" strokeWidth="10" strokeLinecap="round" />
+      <rect x="76" y="99" width="20" height="12" rx="4" fill="#E4833D" />
+    </svg>
   );
 }
 
