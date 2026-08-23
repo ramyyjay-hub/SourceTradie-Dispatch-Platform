@@ -18,6 +18,7 @@ export const jobStatusEnum = pgEnum("job_status", [
   "reviewing",
   "awaiting_dispatch",
   "dispatching",
+  "awaiting_customer_confirmation",
   "accepted",
   "in_progress",
   "completed",
@@ -87,6 +88,13 @@ export const jobsTable = pgTable(
     customerEmail: text("customer_email"),
     serviceAddressLine1: text("service_address_line_1"),
     serviceAddressLine2: text("service_address_line_2"),
+    pricingRuleCode: text("pricing_rule_code"),
+    pricingVersion: text("pricing_version"),
+    expectedPriceKind: text("expected_price_kind"),
+    expectedPriceMinCents: integer("expected_price_min_cents"),
+    expectedPriceMaxCents: integer("expected_price_max_cents"),
+    expectedPriceLabel: text("expected_price_label"),
+    expectedPriceScope: text("expected_price_scope"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -275,6 +283,11 @@ export const dispatchOffersTable = pgTable(
     respondedAt: timestamp("responded_at", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     eta: text("eta"),
+    confirmedPriceKind: text("confirmed_price_kind"),
+    confirmedPriceCents: integer("confirmed_price_cents"),
+    customerConfirmedAt: timestamp("customer_confirmed_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

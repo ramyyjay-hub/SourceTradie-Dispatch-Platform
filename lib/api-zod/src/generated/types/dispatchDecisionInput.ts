@@ -5,9 +5,13 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { DispatchDecisionInputConfirmedPriceKind } from './dispatchDecisionInputConfirmedPriceKind';
 
 export interface DispatchDecisionInput {
   decision: string;
   /** @maxLength 160 */
   eta?: string;
+  confirmedPriceKind?: DispatchDecisionInputConfirmedPriceKind;
+  /** @minimum 1 */
+  confirmedPriceCents?: number;
 }

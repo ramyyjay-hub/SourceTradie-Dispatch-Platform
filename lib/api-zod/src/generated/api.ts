@@ -18,6 +18,36 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * @summary Preview controlled pricing from contact-free job details
+ */
+export const previewPricingBodyDescriptionMin = 4;
+export const previewPricingBodyDescriptionMax = 4000;
+
+export const previewPricingBodyTradeMax = 120;
+
+
+
+export const PreviewPricingBody = zod.object({
+  "description": zod.string().min(previewPricingBodyDescriptionMin).max(previewPricingBodyDescriptionMax),
+  "trade": zod.string().min(1).max(previewPricingBodyTradeMax)
+})
+
+
+
+
+
+export const PreviewPricingResponse = zod.object({
+  "code": zod.string(),
+  "version": zod.string(),
+  "kind": zod.enum(['total', 'diagnostic']),
+  "minCents": zod.number().min(1),
+  "maxCents": zod.number().min(1),
+  "customerLabel": zod.string(),
+  "scope": zod.string()
+})
+
+
+/**
  * @summary List job requests (admin only)
  */
 export const listJobsResponseAssessmentOneAssessmentSuburbMax = 120;
@@ -37,6 +67,8 @@ export const listJobsResponseAssessmentOneAssessmentModelMax = 120;
 export const listJobsResponseAssessmentOneAssessmentPhotoContextCountMin = 0;
 
 export const listJobsResponseAssessmentOneAssessmentCodesMax = 3;
+
+
 
 
 
@@ -78,6 +110,15 @@ export const ListJobsResponseItem = zod.object({
   "codes": zod.array(zod.enum(['ROUTING_REVIEW', 'URGENCY_REVIEW', 'MANUAL_REVIEW_REQUIRED'])).max(listJobsResponseAssessmentOneAssessmentCodesMax)
 }),
   "createdAt": zod.string()
+}),zod.null()]),
+  "expectedPrice": zod.union([zod.object({
+  "code": zod.string(),
+  "version": zod.string(),
+  "kind": zod.enum(['total', 'diagnostic']),
+  "minCents": zod.number().min(1),
+  "maxCents": zod.number().min(1),
+  "customerLabel": zod.string(),
+  "scope": zod.string()
 }),zod.null()])
 })
 export const ListJobsResponse = zod.array(ListJobsResponseItem)
@@ -152,6 +193,8 @@ export const getJobResponseAssessmentOneAssessmentCodesMax = 3;
 
 
 
+
+
 export const GetJobResponse = zod.object({
   "reference": zod.string(),
   "status": zod.string(),
@@ -194,10 +237,22 @@ export const GetJobResponse = zod.object({
 }),
   "createdAt": zod.string()
 }),zod.null()]).optional(),
+  "expectedPrice": zod.union([zod.object({
+  "code": zod.string(),
+  "version": zod.string(),
+  "kind": zod.enum(['total', 'diagnostic']),
+  "minCents": zod.number().min(1),
+  "maxCents": zod.number().min(1),
+  "customerLabel": zod.string(),
+  "scope": zod.string()
+}),zod.null()]),
   "acceptedTradie": zod.union([zod.object({
   "businessName": zod.string(),
   "contactName": zod.string(),
-  "eta": zod.string().nullable()
+  "eta": zod.string().nullable(),
+  "confirmedPriceKind": zod.union([zod.literal('total'),zod.literal('diagnostic'),zod.literal(null)]).nullable(),
+  "confirmedPriceCents": zod.number().nullable(),
+  "customerConfirmed": zod.boolean()
 }),zod.null()])
 })
 
@@ -230,6 +285,8 @@ export const updateJobResponseAssessmentOneAssessmentModelMax = 120;
 export const updateJobResponseAssessmentOneAssessmentPhotoContextCountMin = 0;
 
 export const updateJobResponseAssessmentOneAssessmentCodesMax = 3;
+
+
 
 
 
@@ -271,6 +328,15 @@ export const UpdateJobResponse = zod.object({
   "codes": zod.array(zod.enum(['ROUTING_REVIEW', 'URGENCY_REVIEW', 'MANUAL_REVIEW_REQUIRED'])).max(updateJobResponseAssessmentOneAssessmentCodesMax)
 }),
   "createdAt": zod.string()
+}),zod.null()]),
+  "expectedPrice": zod.union([zod.object({
+  "code": zod.string(),
+  "version": zod.string(),
+  "kind": zod.enum(['total', 'diagnostic']),
+  "minCents": zod.number().min(1),
+  "maxCents": zod.number().min(1),
+  "customerLabel": zod.string(),
+  "scope": zod.string()
 }),zod.null()])
 })
 
@@ -336,6 +402,8 @@ export const correctJobIntakeResponseAssessmentOneAssessmentCodesMax = 3;
 
 
 
+
+
 export const CorrectJobIntakeResponse = zod.object({
   "reference": zod.string(),
   "status": zod.string(),
@@ -378,10 +446,121 @@ export const CorrectJobIntakeResponse = zod.object({
 }),
   "createdAt": zod.string()
 }),zod.null()]).optional(),
+  "expectedPrice": zod.union([zod.object({
+  "code": zod.string(),
+  "version": zod.string(),
+  "kind": zod.enum(['total', 'diagnostic']),
+  "minCents": zod.number().min(1),
+  "maxCents": zod.number().min(1),
+  "customerLabel": zod.string(),
+  "scope": zod.string()
+}),zod.null()]),
   "acceptedTradie": zod.union([zod.object({
   "businessName": zod.string(),
   "contactName": zod.string(),
-  "eta": zod.string().nullable()
+  "eta": zod.string().nullable(),
+  "confirmedPriceKind": zod.union([zod.literal('total'),zod.literal('diagnostic'),zod.literal(null)]).nullable(),
+  "confirmedPriceCents": zod.number().nullable(),
+  "customerConfirmed": zod.boolean()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Customer confirms the accepted tradie price and ETA
+ */
+export const ConfirmDispatchParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const confirmDispatchQueryTokenMin = 16;
+
+
+
+export const ConfirmDispatchQueryParams = zod.object({
+  "token": zod.coerce.string().min(confirmDispatchQueryTokenMin)
+})
+
+export const confirmDispatchResponseAssessmentOneAssessmentSuburbMax = 120;
+
+export const confirmDispatchResponseAssessmentOneAssessmentPostcodeMax = 16;
+
+export const confirmDispatchResponseAssessmentOneAssessmentPreferredAttendanceTimeMax = 160;
+
+export const confirmDispatchResponseAssessmentOneAssessmentNeutralProblemSummaryMax = 500;
+
+export const confirmDispatchResponseAssessmentOneAssessmentEquipmentMax = 120;
+
+export const confirmDispatchResponseAssessmentOneAssessmentBrandMax = 120;
+
+export const confirmDispatchResponseAssessmentOneAssessmentModelMax = 120;
+
+export const confirmDispatchResponseAssessmentOneAssessmentPhotoContextCountMin = 0;
+
+export const confirmDispatchResponseAssessmentOneAssessmentCodesMax = 3;
+
+
+
+
+
+export const ConfirmDispatchResponse = zod.object({
+  "reference": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "intake": zod.object({
+  "description": zod.string(),
+  "trade": zod.string(),
+  "suburb": zod.string(),
+  "postcode": zod.string(),
+  "urgency": zod.string(),
+  "preferredTime": zod.string(),
+  "customerName": zod.string(),
+  "customerPhone": zod.string().nullish(),
+  "customerEmail": zod.string().nullish(),
+  "serviceAddressLine1": zod.string(),
+  "serviceAddressLine2": zod.string().nullish()
+}),
+  "assessment": zod.union([zod.object({
+  "outcome": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string().nullable(),
+  "safetyCodes": zod.array(zod.string()),
+  "assessment": zod.object({
+  "tradeClassification": zod.enum(['plumbing', 'electrical', 'heating_cooling', 'unsure']),
+  "urgencyClassification": zod.enum(['not_urgent', 'soon', 'today', 'emergency', 'unsure']),
+  "suburb": zod.string().max(confirmDispatchResponseAssessmentOneAssessmentSuburbMax).nullable(),
+  "postcode": zod.string().max(confirmDispatchResponseAssessmentOneAssessmentPostcodeMax).nullable(),
+  "preferredAttendanceTime": zod.string().max(confirmDispatchResponseAssessmentOneAssessmentPreferredAttendanceTimeMax).nullable(),
+  "neutralProblemSummary": zod.string().max(confirmDispatchResponseAssessmentOneAssessmentNeutralProblemSummaryMax).nullable(),
+  "equipment": zod.string().max(confirmDispatchResponseAssessmentOneAssessmentEquipmentMax).nullable(),
+  "brand": zod.string().max(confirmDispatchResponseAssessmentOneAssessmentBrandMax).nullable(),
+  "model": zod.string().max(confirmDispatchResponseAssessmentOneAssessmentModelMax).nullable(),
+  "photoContext": zod.object({
+  "provided": zod.boolean(),
+  "count": zod.number().min(confirmDispatchResponseAssessmentOneAssessmentPhotoContextCountMin)
+}),
+  "confidence": zod.enum(['low', 'medium', 'high']),
+  "codes": zod.array(zod.enum(['ROUTING_REVIEW', 'URGENCY_REVIEW', 'MANUAL_REVIEW_REQUIRED'])).max(confirmDispatchResponseAssessmentOneAssessmentCodesMax)
+}),
+  "createdAt": zod.string()
+}),zod.null()]).optional(),
+  "expectedPrice": zod.union([zod.object({
+  "code": zod.string(),
+  "version": zod.string(),
+  "kind": zod.enum(['total', 'diagnostic']),
+  "minCents": zod.number().min(1),
+  "maxCents": zod.number().min(1),
+  "customerLabel": zod.string(),
+  "scope": zod.string()
+}),zod.null()]),
+  "acceptedTradie": zod.union([zod.object({
+  "businessName": zod.string(),
+  "contactName": zod.string(),
+  "eta": zod.string().nullable(),
+  "confirmedPriceKind": zod.union([zod.literal('total'),zod.literal('diagnostic'),zod.literal(null)]).nullable(),
+  "confirmedPriceCents": zod.number().nullable(),
+  "customerConfirmed": zod.boolean()
 }),zod.null()])
 })
 
@@ -474,9 +653,12 @@ export const decideDispatchBodyEtaMax = 160;
 
 
 
+
 export const DecideDispatchBody = zod.object({
   "decision": zod.string(),
-  "eta": zod.string().max(decideDispatchBodyEtaMax).optional()
+  "eta": zod.string().max(decideDispatchBodyEtaMax).optional(),
+  "confirmedPriceKind": zod.enum(['total', 'diagnostic']).optional(),
+  "confirmedPriceCents": zod.number().min(1).optional()
 })
 
 export const DecideDispatchResponse = zod.object({
@@ -486,7 +668,10 @@ export const DecideDispatchResponse = zod.object({
   "decision": zod.string(),
   "offeredAt": zod.string().optional(),
   "respondedAt": zod.string().nullish(),
-  "eta": zod.string().nullish()
+  "eta": zod.string().nullish(),
+  "confirmedPriceKind": zod.union([zod.literal('total'),zod.literal('diagnostic'),zod.literal(null)]).nullish(),
+  "confirmedPriceCents": zod.number().nullish(),
+  "customerConfirmedAt": zod.string().nullish()
 })
 
 
@@ -529,6 +714,8 @@ export const listJobsAwaitingDispatchResponseAssessmentOneAssessmentCodesMax = 3
 
 
 
+
+
 export const ListJobsAwaitingDispatchResponseItem = zod.object({
   "id": zod.number(),
   "reference": zod.string(),
@@ -567,6 +754,15 @@ export const ListJobsAwaitingDispatchResponseItem = zod.object({
   "codes": zod.array(zod.enum(['ROUTING_REVIEW', 'URGENCY_REVIEW', 'MANUAL_REVIEW_REQUIRED'])).max(listJobsAwaitingDispatchResponseAssessmentOneAssessmentCodesMax)
 }),
   "createdAt": zod.string()
+}),zod.null()]),
+  "expectedPrice": zod.union([zod.object({
+  "code": zod.string(),
+  "version": zod.string(),
+  "kind": zod.enum(['total', 'diagnostic']),
+  "minCents": zod.number().min(1),
+  "maxCents": zod.number().min(1),
+  "customerLabel": zod.string(),
+  "scope": zod.string()
 }),zod.null()])
 })
 export const ListJobsAwaitingDispatchResponse = zod.array(ListJobsAwaitingDispatchResponseItem)
@@ -624,6 +820,9 @@ export const ListDispatchOffersResponseItem = zod.object({
   "respondedAt": zod.string().nullish(),
   "expiresAt": zod.string().nullish(),
   "eta": zod.string().nullish(),
+  "confirmedPriceKind": zod.union([zod.literal('total'),zod.literal('diagnostic'),zod.literal(null)]).nullish(),
+  "confirmedPriceCents": zod.number().nullish(),
+  "customerConfirmedAt": zod.string().nullish(),
   "notificationStatus": zod.enum(['pending', 'sent', 'delivered', 'failed']).optional()
 })
 export const ListDispatchOffersResponse = zod.array(ListDispatchOffersResponseItem)
@@ -647,6 +846,9 @@ export const CreateDispatchOfferResponse = zod.object({
   "respondedAt": zod.string().nullish(),
   "expiresAt": zod.string().nullish(),
   "eta": zod.string().nullish(),
+  "confirmedPriceKind": zod.union([zod.literal('total'),zod.literal('diagnostic'),zod.literal(null)]).nullish(),
+  "confirmedPriceCents": zod.number().nullish(),
+  "customerConfirmedAt": zod.string().nullish(),
   "notificationStatus": zod.enum(['pending', 'sent', 'delivered', 'failed']).optional()
 })
 
@@ -654,6 +856,10 @@ export const CreateDispatchOfferResponse = zod.object({
 /**
  * @summary List offers for the authenticated partner
  */
+
+
+
+
 export const ListPartnerOffersResponseItem = zod.object({
   "id": zod.number(),
   "jobId": zod.number(),
@@ -663,6 +869,9 @@ export const ListPartnerOffersResponseItem = zod.object({
   "respondedAt": zod.string().nullish(),
   "expiresAt": zod.string().nullish(),
   "eta": zod.string().nullish(),
+  "confirmedPriceKind": zod.union([zod.literal('total'),zod.literal('diagnostic'),zod.literal(null)]).nullish(),
+  "confirmedPriceCents": zod.number().nullish(),
+  "customerConfirmedAt": zod.string().nullish(),
   "notificationStatus": zod.enum(['pending', 'sent', 'delivered', 'failed']).optional()
 }).and(zod.object({
   "job": zod.object({
@@ -673,6 +882,15 @@ export const ListPartnerOffersResponseItem = zod.object({
   "urgency": zod.string(),
   "preferredTime": zod.string(),
   "description": zod.string(),
+  "expectedPrice": zod.union([zod.object({
+  "code": zod.string(),
+  "version": zod.string(),
+  "kind": zod.enum(['total', 'diagnostic']),
+  "minCents": zod.number().min(1),
+  "maxCents": zod.number().min(1),
+  "customerLabel": zod.string(),
+  "scope": zod.string()
+}),zod.null()]),
   "customerName": zod.string().nullish(),
   "customerPhone": zod.string().nullish(),
   "customerEmail": zod.string().nullish(),
@@ -699,7 +917,10 @@ export const ExpireDispatchOfferResponse = zod.object({
   "decision": zod.string(),
   "offeredAt": zod.string().optional(),
   "respondedAt": zod.string().nullish(),
-  "eta": zod.string().nullish()
+  "eta": zod.string().nullish(),
+  "confirmedPriceKind": zod.union([zod.literal('total'),zod.literal('diagnostic'),zod.literal(null)]).nullish(),
+  "confirmedPriceCents": zod.number().nullish(),
+  "customerConfirmedAt": zod.string().nullish()
 })
 
 

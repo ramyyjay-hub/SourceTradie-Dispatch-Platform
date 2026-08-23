@@ -5,10 +5,16 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AcceptedTradieConfirmedPriceKind } from './acceptedTradieConfirmedPriceKind';
 
 export interface AcceptedTradie {
   businessName: string;
   contactName: string;
   /** @nullable */
   eta: string | null;
+  /** @nullable */
+  confirmedPriceKind: AcceptedTradieConfirmedPriceKind;
+  /** @nullable */
+  confirmedPriceCents: number | null;
+  customerConfirmed: boolean;
 }

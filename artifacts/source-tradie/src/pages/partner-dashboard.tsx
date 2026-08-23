@@ -54,6 +54,10 @@ function Dashboard() {
   const decide = useDecideDispatch();
   const queryClient = useQueryClient();
   const [etas, setEtas] = useState<Record<number, string>>({});
+  const [prices, setPrices] = useState<Record<number, string>>({});
+  const [priceKinds, setPriceKinds] = useState<
+    Record<number, "total" | "diagnostic">
+  >({});
   const partner = partners.data?.[0];
   if (partners.isLoading)
     return (
@@ -82,6 +86,12 @@ function Dashboard() {
         data: {
           decision,
           eta: decision === "accepted" ? etas[id] || undefined : undefined,
+          confirmedPriceKind:
+            decision === "accepted" ? priceKinds[id] || "total" : undefined,
+          confirmedPriceCents:
+            decision === "accepted"
+              ? Math.round(Number(prices[id]) * 100)
+              : undefined,
         },
       },
       { onSuccess: () => queryClient.invalidateQueries() },
@@ -137,7 +147,19 @@ function Dashboard() {
                 </div>
                 <ShieldCheck size={18} />
               </div>
-              {offer.state === "accepted" ? (
+              {offer.job?.expectedPrice && (
+                <div className="mt-4 rounded-xl border border-[hsl(var(--border))] p-4 text-sm">
+                  <strong>{offer.job.expectedPrice.customerLabel}</strong>
+                  <p className="mt-1 text-xl font-bold">
+                    ${(offer.job.expectedPrice.minCents / 100).toFixed(0)}–$
+                    {(offer.job.expectedPrice.maxCents / 100).toFixed(0)}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+                    {offer.job.expectedPrice.scope}
+                  </p>
+                </div>
+              )}
+              {offer.customerConfirmedAt ? (
                 <div
                   className="mt-4 rounded-xl bg-[hsl(var(--muted))] p-4 text-sm"
                   data-testid={`accepted-details-${offer.id}`}
@@ -155,15 +177,57 @@ function Dashboard() {
                     , {offer.job?.suburb} {offer.job?.postcode}
                   </p>
                   {offer.eta && <p className="mt-2">ETA/status: {offer.eta}</p>}
+                  {offer.confirmedPriceCents && (
+                    <p>
+                      Confirmed {offer.confirmedPriceKind} price: $
+                      {(offer.confirmedPriceCents / 100).toFixed(2)}
+                    </p>
+                  )}
                 </div>
+              ) : offer.state === "accepted" ? (
+                <p className="mt-4 rounded-xl bg-[hsl(var(--muted))] p-4 text-sm font-semibold">
+                  Waiting for customer confirmation. Their contact details and exact address remain hidden.
+                </p>
               ) : (
                 <p className="mt-4 text-xs text-[hsl(var(--muted-foreground))]">
-                  Customer contact and exact address stay hidden until you
-                  accept.
+                  Customer contact and exact address stay hidden until the customer confirms your price and ETA.
                 </p>
               )}
               {offer.state === "pending" && (
-                <div className="mt-4">
+                <div className="mt-4 grid gap-3">
+                  <div className="grid gap-3 sm:grid-cols-[.8fr_1.2fr]">
+                    <select
+                      className="field"
+                      value={priceKinds[offer.id] ?? "total"}
+                      onChange={(event) =>
+                        setPriceKinds((current) => ({
+                          ...current,
+                          [offer.id]: event.target.value as
+                            | "total"
+                            | "diagnostic",
+                        }))
+                      }
+                      data-testid={`select-price-kind-${offer.id}`}
+                    >
+                      <option value="total">Confirmed total</option>
+                      <option value="diagnostic">Diagnostic/call-out</option>
+                    </select>
+                    <input
+                      className="field"
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      value={prices[offer.id] ?? ""}
+                      onChange={(event) =>
+                        setPrices((current) => ({
+                          ...current,
+                          [offer.id]: event.target.value,
+                        }))
+                      }
+                      placeholder="Confirmed price (AUD)"
+                      data-testid={`input-price-${offer.id}`}
+                    />
+                  </div>
                   <input
                     className="field"
                     value={etas[offer.id] ?? ""}
@@ -173,14 +237,19 @@ function Dashboard() {
                         [offer.id]: event.target.value,
                       }))
                     }
-                    placeholder="Optional ETA/status, e.g. 45 minutes"
+                    placeholder="Required ETA/status, e.g. 45 minutes"
                     data-testid={`input-eta-${offer.id}`}
                   />
                   <div className="mt-3 flex gap-2">
                     <button
                       className="btn-main"
                       onClick={() => act(offer.id, "accepted")}
-                      disabled={decide.isPending}
+                      disabled={
+                        decide.isPending ||
+                        !etas[offer.id]?.trim() ||
+                        !prices[offer.id] ||
+                        Number(prices[offer.id]) <= 0
+                      }
                       data-testid={`button-accept-opportunity-${offer.id}`}
                     >
                       Accept

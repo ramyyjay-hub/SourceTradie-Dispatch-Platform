@@ -36,6 +36,13 @@
       "when": 1787536800000,
       "tag": "0004_phase5_pilot_notifications",
       "breakpoints": false
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787558400000,
+      "tag": "0005_pricing_customer_confirmation",
+      "breakpoints": false
     }
   ]
 }

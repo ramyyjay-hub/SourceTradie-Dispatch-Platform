@@ -8,6 +8,7 @@
 import type { AcceptedTradie } from './acceptedTradie';
 import type { CustomerConfirmedIntake } from './customerConfirmedIntake';
 import type { JobAssessment } from './jobAssessment';
+import type { PricingSnapshot } from './pricingSnapshot';
 
 export interface PublicJobStatus {
   reference: string;
@@ -16,5 +17,6 @@ export interface PublicJobStatus {
   updatedAt: string;
   intake: CustomerConfirmedIntake;
   assessment?: JobAssessment | null;
+  expectedPrice: PricingSnapshot | null;
   acceptedTradie: AcceptedTradie | null;
 }

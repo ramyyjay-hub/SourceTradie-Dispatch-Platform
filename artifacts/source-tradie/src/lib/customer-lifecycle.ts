@@ -3,6 +3,7 @@ export type CustomerJobStatus =
   | "reviewing"
   | "awaiting_dispatch"
   | "dispatching"
+  | "awaiting_customer_confirmation"
   | "accepted"
   | "in_progress"
   | "completed"
@@ -45,6 +46,13 @@ const presentations: Record<
     assessmentLabel: "Safety and request details",
     assessmentMessage:
       "Your request details are confirmed and an offer has been sent.",
+  },
+  awaiting_customer_confirmation: {
+    activeStage: 3,
+    title: "Price and ETA ready to confirm",
+    assessmentLabel: "Safety and request details",
+    assessmentMessage:
+      "A local tradie has confirmed their price and ETA. They have not received your exact address.",
   },
   accepted: {
     activeStage: 3,

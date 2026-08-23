@@ -108,6 +108,26 @@ export interface JobAssessment {
   createdAt: string;
 }
 
+export type PricingSnapshotKind = typeof PricingSnapshotKind[keyof typeof PricingSnapshotKind];
+
+
+export const PricingSnapshotKind = {
+  total: 'total',
+  diagnostic: 'diagnostic',
+} as const;
+
+export interface PricingSnapshot {
+  code: string;
+  version: string;
+  kind: PricingSnapshotKind;
+  /** @minimum 1 */
+  minCents: number;
+  /** @minimum 1 */
+  maxCents: number;
+  customerLabel: string;
+  scope: string;
+}
+
 export interface Job {
   id: number;
   reference: string;
@@ -126,6 +146,7 @@ export interface Job {
   createdAt: string;
   images?: string[];
   assessment: JobAssessment | null;
+  expectedPrice: PricingSnapshot | null;
 }
 
 export interface CreateJobResponse {
@@ -154,11 +175,27 @@ export interface CustomerConfirmedIntake {
   serviceAddressLine2?: string | null;
 }
 
+/**
+ * @nullable
+ */
+export type AcceptedTradieConfirmedPriceKind = typeof AcceptedTradieConfirmedPriceKind[keyof typeof AcceptedTradieConfirmedPriceKind] | null;
+
+
+export const AcceptedTradieConfirmedPriceKind = {
+  total: 'total',
+  diagnostic: 'diagnostic',
+} as const;
+
 export interface AcceptedTradie {
   businessName: string;
   contactName: string;
   /** @nullable */
   eta: string | null;
+  /** @nullable */
+  confirmedPriceKind: AcceptedTradieConfirmedPriceKind;
+  /** @nullable */
+  confirmedPriceCents: number | null;
+  customerConfirmed: boolean;
 }
 
 export interface PublicJobStatus {
@@ -168,6 +205,7 @@ export interface PublicJobStatus {
   updatedAt: string;
   intake: CustomerConfirmedIntake;
   assessment?: JobAssessment | null;
+  expectedPrice: PricingSnapshot | null;
   acceptedTradie: AcceptedTradie | null;
 }
 
@@ -186,6 +224,19 @@ export interface JobInput {
   serviceAddressLine1: string;
   serviceAddressLine2?: string;
   images?: string[];
+}
+
+export interface PricingPreviewInput {
+  /**
+     * @minLength 4
+     * @maxLength 4000
+     */
+  description: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  trade: string;
 }
 
 export interface JobUpdate {
@@ -247,6 +298,17 @@ export interface AvailabilityInput {
   availability: boolean;
 }
 
+/**
+ * @nullable
+ */
+export type DispatchConfirmedPriceKind = typeof DispatchConfirmedPriceKind[keyof typeof DispatchConfirmedPriceKind] | null;
+
+
+export const DispatchConfirmedPriceKind = {
+  total: 'total',
+  diagnostic: 'diagnostic',
+} as const;
+
 export interface Dispatch {
   id: number;
   jobId: number;
@@ -257,12 +319,29 @@ export interface Dispatch {
   respondedAt?: string | null;
   /** @nullable */
   eta?: string | null;
+  /** @nullable */
+  confirmedPriceKind?: DispatchConfirmedPriceKind;
+  /** @nullable */
+  confirmedPriceCents?: number | null;
+  /** @nullable */
+  customerConfirmedAt?: string | null;
 }
+
+export type DispatchDecisionInputConfirmedPriceKind = typeof DispatchDecisionInputConfirmedPriceKind[keyof typeof DispatchDecisionInputConfirmedPriceKind];
+
+
+export const DispatchDecisionInputConfirmedPriceKind = {
+  total: 'total',
+  diagnostic: 'diagnostic',
+} as const;
 
 export interface DispatchDecisionInput {
   decision: string;
   /** @maxLength 160 */
   eta?: string;
+  confirmedPriceKind?: DispatchDecisionInputConfirmedPriceKind;
+  /** @minimum 1 */
+  confirmedPriceCents?: number;
 }
 
 export interface DispatchOfferInput {
@@ -270,6 +349,17 @@ export interface DispatchOfferInput {
   partnerId: number;
   expiresAt: string;
 }
+
+/**
+ * @nullable
+ */
+export type DispatchOfferConfirmedPriceKind = typeof DispatchOfferConfirmedPriceKind[keyof typeof DispatchOfferConfirmedPriceKind] | null;
+
+
+export const DispatchOfferConfirmedPriceKind = {
+  total: 'total',
+  diagnostic: 'diagnostic',
+} as const;
 
 export type DispatchOfferNotificationStatus = typeof DispatchOfferNotificationStatus[keyof typeof DispatchOfferNotificationStatus];
 
@@ -293,6 +383,12 @@ export interface DispatchOffer {
   expiresAt?: string | null;
   /** @nullable */
   eta?: string | null;
+  /** @nullable */
+  confirmedPriceKind?: DispatchOfferConfirmedPriceKind;
+  /** @nullable */
+  confirmedPriceCents?: number | null;
+  /** @nullable */
+  customerConfirmedAt?: string | null;
   notificationStatus?: DispatchOfferNotificationStatus;
 }
 
@@ -304,6 +400,7 @@ export interface PartnerOfferJob {
   urgency: string;
   preferredTime: string;
   description: string;
+  expectedPrice: PricingSnapshot | null;
   /** @nullable */
   customerName?: string | null;
   /** @nullable */
@@ -352,6 +449,13 @@ token: JobStatusTokenParameter;
 };
 
 export type CorrectJobIntakeParams = {
+/**
+ * @minLength 16
+ */
+token: JobStatusTokenParameter;
+};
+
+export type ConfirmDispatchParams = {
 /**
  * @minLength 16
  */

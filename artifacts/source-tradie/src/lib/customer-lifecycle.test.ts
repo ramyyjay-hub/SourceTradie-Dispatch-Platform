@@ -21,6 +21,7 @@ describe("customer lifecycle presentation", () => {
     ["reviewing", 1, "Request is being reviewed"],
     ["awaiting_dispatch", 2, "Finding the right local tradie"],
     ["dispatching", 2, "A local tradie is considering your request"],
+    ["awaiting_customer_confirmation", 3, "Price and ETA ready to confirm"],
     ["accepted", 3, "Tradie confirmed"],
     ["in_progress", 3, "Work is in progress"],
     ["completed", 3, "Request completed"],

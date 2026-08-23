@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { DispatchConfirmedPriceKind } from './dispatchConfirmedPriceKind';
 
 export interface Dispatch {
   id: number;
@@ -16,4 +17,10 @@ export interface Dispatch {
   respondedAt?: string | null;
   /** @nullable */
   eta?: string | null;
+  /** @nullable */
+  confirmedPriceKind?: DispatchConfirmedPriceKind;
+  /** @nullable */
+  confirmedPriceCents?: number | null;
+  /** @nullable */
+  customerConfirmedAt?: string | null;
 }

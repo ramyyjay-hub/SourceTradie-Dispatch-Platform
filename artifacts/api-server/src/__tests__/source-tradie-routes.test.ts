@@ -16,6 +16,7 @@ async function createTestApi() {
     "0002_phase3_dispatch_lifecycle.sql",
     "0003_phase4_safe_intake_ai.sql",
     "0004_phase5_pilot_notifications.sql",
+    "0005_pricing_customer_confirmation.sql",
   ].map((file) =>
     path.resolve(import.meta.dirname, "../../../../lib/db/migrations", file),
   );
@@ -53,6 +54,34 @@ describe("public job status route", () => {
   it("returns a usable status URL and only serves it with its issued token", async () => {
     const api = await createTestApi();
     try {
+      const previewResponse = await fetch(`${api.baseUrl}/api/pricing/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: "Kitchen tap is leaking slowly.",
+          trade: "Plumbing",
+        }),
+      });
+      expect(previewResponse.status).toBe(200);
+      expect(await previewResponse.json()).toMatchObject({
+        code: "plumbing.tap_leak",
+        kind: "total",
+      });
+
+      const privatePreviewResponse = await fetch(
+        `${api.baseUrl}/api/pricing/preview`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            description: "Kitchen tap is leaking slowly.",
+            trade: "Plumbing",
+            serviceAddressLine1: "12 Example Street",
+          }),
+        },
+      );
+      expect(privatePreviewResponse.status).toBe(400);
+
       const createResponse = await fetch(`${api.baseUrl}/api/jobs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -84,6 +113,14 @@ describe("public job status route", () => {
         `${api.baseUrl}/api/jobs/${created.id}${statusUrl.search}`,
       );
       expect(statusResponse.status).toBe(200);
+      const status = (await statusResponse.json()) as {
+        expectedPrice: { code: string; minCents: number; maxCents: number };
+      };
+      expect(status.expectedPrice).toMatchObject({
+        code: "plumbing.tap_leak",
+        minCents: 15_000,
+        maxCents: 30_000,
+      });
 
       const invalidTokenResponse = await fetch(
         `${api.baseUrl}/api/jobs/${created.id}?token=${"0".repeat(64)}`,

@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { DispatchOfferConfirmedPriceKind } from './dispatchOfferConfirmedPriceKind';
 import type { DispatchOfferNotificationStatus } from './dispatchOfferNotificationStatus';
 
 export interface DispatchOffer {
@@ -19,5 +20,11 @@ export interface DispatchOffer {
   expiresAt?: string | null;
   /** @nullable */
   eta?: string | null;
+  /** @nullable */
+  confirmedPriceKind?: DispatchOfferConfirmedPriceKind;
+  /** @nullable */
+  confirmedPriceCents?: number | null;
+  /** @nullable */
+  customerConfirmedAt?: string | null;
   notificationStatus?: DispatchOfferNotificationStatus;
 }

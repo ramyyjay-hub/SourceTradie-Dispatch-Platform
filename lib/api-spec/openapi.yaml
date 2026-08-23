@@ -31,6 +31,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /pricing/preview:
+    post:
+      operationId: previewPricing
+      tags: [jobs]
+      summary: Preview controlled pricing from contact-free job details
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PricingPreviewInput"
+      responses:
+        "200":
+          description: Controlled Melbourne pilot pricing preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingSnapshot"
+        "400":
+          description: Only description and trade are accepted
+
   /jobs:
     get:
       operationId: listJobs
@@ -139,6 +160,28 @@ paths:
           description: Missing or invalid token
         "404":
           description: Job not found
+
+  /jobs/{id}/confirm-dispatch:
+    post:
+      operationId: confirmDispatch
+      tags: [jobs]
+      summary: Customer confirms the accepted tradie price and ETA
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/JobStatusToken"
+      responses:
+        "200":
+          description: Customer-confirmed dispatch status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicJobStatus"
+        "401":
+          description: Missing or invalid token
+        "404":
+          description: Job not found
+        "409":
+          description: Job is not ready for customer confirmation
 
   /partners:
     get:
@@ -424,6 +467,7 @@ components:
           status,
           createdAt,
           assessment,
+          expectedPrice,
         ]
       properties:
         id: { type: number }
@@ -446,6 +490,10 @@ components:
           anyOf:
             - $ref: "#/components/schemas/JobAssessment"
             - type: "null"
+        expectedPrice:
+          anyOf:
+            - $ref: "#/components/schemas/PricingSnapshot"
+            - type: "null"
 
     CreateJobResponse:
       type: object
@@ -462,7 +510,7 @@ components:
     PublicJobStatus:
       type: object
       required:
-        [reference, status, createdAt, updatedAt, intake, acceptedTradie]
+        [reference, status, createdAt, updatedAt, intake, expectedPrice, acceptedTradie]
       properties:
         reference: { type: string }
         status: { type: string }
@@ -473,6 +521,10 @@ components:
         assessment:
           anyOf:
             - $ref: "#/components/schemas/JobAssessment"
+            - type: "null"
+        expectedPrice:
+          anyOf:
+            - $ref: "#/components/schemas/PricingSnapshot"
             - type: "null"
         acceptedTradie:
           anyOf:
@@ -507,6 +559,26 @@ components:
         images:
           type: array
           items: { type: string }
+
+    PricingPreviewInput:
+      type: object
+      additionalProperties: false
+      required: [description, trade]
+      properties:
+        description: { type: string, minLength: 4, maxLength: 4000 }
+        trade: { type: string, minLength: 1, maxLength: 120 }
+
+    PricingSnapshot:
+      type: object
+      required: [code, version, kind, minCents, maxCents, customerLabel, scope]
+      properties:
+        code: { type: string }
+        version: { type: string }
+        kind: { type: string, enum: [total, diagnostic] }
+        minCents: { type: number, minimum: 1 }
+        maxCents: { type: number, minimum: 1 }
+        customerLabel: { type: string }
+        scope: { type: string }
 
     JobUpdate:
       type: object
@@ -694,6 +766,10 @@ components:
         offeredAt: { type: string }
         respondedAt: { type: ["string", "null"] }
         eta: { type: ["string", "null"] }
+        confirmedPriceKind:
+          { type: ["string", "null"], enum: [total, diagnostic, null] }
+        confirmedPriceCents: { type: ["number", "null"] }
+        customerConfirmedAt: { type: ["string", "null"] }
 
     DispatchDecisionInput:
       type: object
@@ -701,6 +777,8 @@ components:
       properties:
         decision: { type: string }
         eta: { type: string, maxLength: 160 }
+        confirmedPriceKind: { type: string, enum: [total, diagnostic] }
+        confirmedPriceCents: { type: number, minimum: 1 }
 
     DispatchOfferInput:
       type: object
@@ -722,6 +800,10 @@ components:
         respondedAt: { type: ["string", "null"] }
         expiresAt: { type: ["string", "null"] }
         eta: { type: ["string", "null"] }
+        confirmedPriceKind:
+          { type: ["string", "null"], enum: [total, diagnostic, null] }
+        confirmedPriceCents: { type: ["number", "null"] }
+        customerConfirmedAt: { type: ["string", "null"] }
         notificationStatus:
           { type: string, enum: [pending, sent, delivered, failed] }
 
@@ -746,6 +828,7 @@ components:
           description,
           createdAt,
           updatedAt,
+          expectedPrice,
         ]
       properties:
         reference: { type: string }
@@ -755,6 +838,10 @@ components:
         urgency: { type: string }
         preferredTime: { type: string }
         description: { type: string }
+        expectedPrice:
+          anyOf:
+            - $ref: "#/components/schemas/PricingSnapshot"
+            - type: "null"
         customerName: { type: ["string", "null"] }
         customerPhone: { type: ["string", "null"] }
         customerEmail: { type: ["string", "null"] }
@@ -779,11 +866,16 @@ components:
 
     AcceptedTradie:
       type: object
-      required: [businessName, contactName, eta]
+      required:
+        [businessName, contactName, eta, confirmedPriceKind, confirmedPriceCents, customerConfirmed]
       properties:
         businessName: { type: string }
         contactName: { type: string }
         eta: { type: ["string", "null"] }
+        confirmedPriceKind:
+          { type: ["string", "null"], enum: [total, diagnostic, null] }
+        confirmedPriceCents: { type: ["number", "null"] }
+        customerConfirmed: { type: boolean }
 
     AdminSummary:
       type: object

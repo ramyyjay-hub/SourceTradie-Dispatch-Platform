@@ -24,6 +24,11 @@ import {
 } from "./job-ai-provider";
 import { classifySafety } from "./safety-classifier";
 import {
+  matchMelbournePricing,
+  type PriceKind,
+  type PricingPreview,
+} from "./pricing";
+import {
   createNotificationProvider,
   type NotificationProvider,
 } from "./notification-provider";
@@ -48,6 +53,7 @@ export type JobApi = {
   createdAt: string;
   images: string[];
   assessment: JobAssessmentApi | null;
+  expectedPrice: PricingPreview | null;
 };
 
 export type CreatedJobApi = JobApi & {
@@ -73,10 +79,14 @@ export type PublicJobStatusApi = {
     serviceAddressLine2: string | null;
   };
   assessment: JobAssessmentApi | null;
+  expectedPrice: PricingPreview | null;
   acceptedTradie: {
     businessName: string;
     contactName: string;
     eta: string | null;
+    confirmedPriceKind: PriceKind | null;
+    confirmedPriceCents: number | null;
+    customerConfirmed: boolean;
   } | null;
 };
 
@@ -119,6 +129,9 @@ export type DispatchApi = {
   offeredAt: string;
   respondedAt: string | null;
   eta: string | null;
+  confirmedPriceKind: PriceKind | null;
+  confirmedPriceCents: number | null;
+  customerConfirmedAt: string | null;
 };
 
 export type AdminSummaryApi = {
@@ -147,7 +160,8 @@ const jobStatusTransitions: Record<JobStatus, JobStatus[]> = {
   new: ["reviewing", "cancelled"],
   reviewing: ["awaiting_dispatch", "cancelled"],
   awaiting_dispatch: ["dispatching", "cancelled"],
-  dispatching: ["accepted", "awaiting_dispatch", "cancelled"],
+  dispatching: ["awaiting_customer_confirmation", "awaiting_dispatch", "cancelled"],
+  awaiting_customer_confirmation: ["accepted", "cancelled"],
   accepted: ["in_progress", "cancelled"],
   in_progress: ["completed", "cancelled"],
   completed: [],
@@ -232,7 +246,7 @@ export class SourceTradieRepository {
     jobId: number;
     dispatchOfferId: number;
     recipientType: "partner" | "customer";
-    type: "offer_created" | "offer_accepted";
+    type: "offer_created" | "price_ready" | "customer_confirmed";
     idempotencyKey: string;
     to: string | null;
     subject: string;
@@ -327,6 +341,30 @@ export class SourceTradieRepository {
       createdAt: toIso(row.createdAt),
       images,
       assessment,
+      expectedPrice: this.pricingFromJob(row),
+    };
+  }
+
+  private pricingFromJob(row: typeof jobsTable.$inferSelect): PricingPreview | null {
+    if (
+      !row.pricingRuleCode ||
+      !row.pricingVersion ||
+      !row.expectedPriceKind ||
+      !row.expectedPriceMinCents ||
+      !row.expectedPriceMaxCents ||
+      !row.expectedPriceLabel ||
+      !row.expectedPriceScope
+    ) {
+      return null;
+    }
+    return {
+      code: row.pricingRuleCode,
+      version: row.pricingVersion as PricingPreview["version"],
+      kind: row.expectedPriceKind as PriceKind,
+      minCents: row.expectedPriceMinCents,
+      maxCents: row.expectedPriceMaxCents,
+      customerLabel: row.expectedPriceLabel,
+      scope: row.expectedPriceScope,
     };
   }
 
@@ -468,6 +506,7 @@ export class SourceTradieRepository {
     serviceAddressLine2?: string;
     images?: string[];
   }): Promise<CreatedJobApi> {
+    const pricing = matchMelbournePricing(input);
     const created = await this.database.transaction(async (tx) => {
       const now = new Date();
       const placeholderReference = `ST-PENDING-${now.getTime()}-${Math.floor(
@@ -491,6 +530,13 @@ export class SourceTradieRepository {
           customerEmail: input.customerEmail ?? null,
           serviceAddressLine1: input.serviceAddressLine1 ?? null,
           serviceAddressLine2: input.serviceAddressLine2 ?? null,
+          pricingRuleCode: pricing.code,
+          pricingVersion: pricing.version,
+          expectedPriceKind: pricing.kind,
+          expectedPriceMinCents: pricing.minCents,
+          expectedPriceMaxCents: pricing.maxCents,
+          expectedPriceLabel: pricing.customerLabel,
+          expectedPriceScope: pricing.scope,
           status: "awaiting_dispatch",
           createdAt: now,
           updatedAt: now,
@@ -608,6 +654,7 @@ export class SourceTradieRepository {
 
     const assessmentsByJobId = await this.getLatestAssessments([row.id]);
     const acceptedRows =
+      row.status === "awaiting_customer_confirmation" ||
       row.status === "accepted" ||
       row.status === "in_progress" ||
       row.status === "completed"
@@ -616,6 +663,9 @@ export class SourceTradieRepository {
               businessName: partnersTable.businessName,
               contactName: partnersTable.contactName,
               eta: dispatchOffersTable.eta,
+              confirmedPriceKind: dispatchOffersTable.confirmedPriceKind,
+              confirmedPriceCents: dispatchOffersTable.confirmedPriceCents,
+              customerConfirmedAt: dispatchOffersTable.customerConfirmedAt,
             })
             .from(dispatchOffersTable)
             .innerJoin(
@@ -630,6 +680,7 @@ export class SourceTradieRepository {
             )
             .limit(1)
         : [];
+    const accepted = acceptedRows[0];
     return {
       reference: row.reference,
       status: row.status,
@@ -649,7 +700,17 @@ export class SourceTradieRepository {
         serviceAddressLine2: row.serviceAddressLine2 ?? null,
       },
       assessment: assessmentsByJobId.get(row.id) ?? null,
-      acceptedTradie: acceptedRows[0] ?? null,
+      expectedPrice: this.pricingFromJob(row),
+      acceptedTradie: accepted
+        ? {
+            businessName: accepted.businessName,
+            contactName: accepted.contactName,
+            eta: accepted.eta ?? null,
+            confirmedPriceKind: accepted.confirmedPriceKind as PriceKind | null,
+            confirmedPriceCents: accepted.confirmedPriceCents ?? null,
+            customerConfirmed: Boolean(accepted.customerConfirmedAt),
+          }
+        : null,
     };
   }
 
@@ -670,6 +731,7 @@ export class SourceTradieRepository {
       serviceAddressLine2?: string;
     },
   ): Promise<PublicJobStatusApi | null> {
+    const pricing = matchMelbournePricing(input);
     const currentRows = await this.database
       .select()
       .from(jobsTable)
@@ -696,6 +758,13 @@ export class SourceTradieRepository {
           customerEmail: input.customerEmail ?? null,
           serviceAddressLine1: input.serviceAddressLine1 ?? null,
           serviceAddressLine2: input.serviceAddressLine2 ?? null,
+          pricingRuleCode: pricing.code,
+          pricingVersion: pricing.version,
+          expectedPriceKind: pricing.kind,
+          expectedPriceMinCents: pricing.minCents,
+          expectedPriceMaxCents: pricing.maxCents,
+          expectedPriceLabel: pricing.customerLabel,
+          expectedPriceScope: pricing.scope,
           updatedAt: now,
         })
         .where(eq(jobsTable.id, jobId))
@@ -1075,6 +1144,11 @@ export class SourceTradieRepository {
       respondedAt: row.respondedAt ? toIso(row.respondedAt) : null,
       expiresAt: row.expiresAt ? toIso(row.expiresAt) : null,
       eta: row.eta ?? null,
+      confirmedPriceKind: (row.confirmedPriceKind as PriceKind | null) ?? null,
+      confirmedPriceCents: row.confirmedPriceCents ?? null,
+      customerConfirmedAt: row.customerConfirmedAt
+        ? toIso(row.customerConfirmedAt)
+        : null,
       notificationStatus: notificationByOffer.get(row.id) ?? null,
       job: jobsById.get(row.jobId)
         ? {
@@ -1116,7 +1190,8 @@ export class SourceTradieRepository {
         const job = jobsById.get(row.jobId);
         if (!job) return null;
 
-        const customerVisible = row.state === "accepted";
+        const customerVisible =
+          row.state === "accepted" && Boolean(row.customerConfirmedAt);
 
         return {
           id: row.id,
@@ -1127,6 +1202,12 @@ export class SourceTradieRepository {
           respondedAt: row.respondedAt ? toIso(row.respondedAt) : null,
           expiresAt: row.expiresAt ? toIso(row.expiresAt) : null,
           eta: row.eta ?? null,
+          confirmedPriceKind:
+            (row.confirmedPriceKind as PriceKind | null) ?? null,
+          confirmedPriceCents: row.confirmedPriceCents ?? null,
+          customerConfirmedAt: row.customerConfirmedAt
+            ? toIso(row.customerConfirmedAt)
+            : null,
           job: {
             reference: job.reference,
             trade: job.trade,
@@ -1135,6 +1216,7 @@ export class SourceTradieRepository {
             urgency: job.urgency,
             preferredTime: job.preferredTime,
             description: job.description,
+            expectedPrice: this.pricingFromJob(job),
             customerName: customerVisible ? job.customerName : null,
             customerPhone: customerVisible ? job.customerPhone : null,
             customerEmail: customerVisible ? job.customerEmail : null,
@@ -1336,6 +1418,9 @@ export class SourceTradieRepository {
         urgency: jobsTable.urgency,
         preferredTime: jobsTable.preferredTime,
         description: jobsTable.description,
+        expectedPriceKind: jobsTable.expectedPriceKind,
+        expectedPriceMinCents: jobsTable.expectedPriceMinCents,
+        expectedPriceMaxCents: jobsTable.expectedPriceMaxCents,
       })
       .from(jobsTable)
       .where(eq(jobsTable.id, input.jobId))
@@ -1419,6 +1504,9 @@ export class SourceTradieRepository {
         `A ${job.trade} opportunity is available in ${job.suburb} ${job.postcode}.`,
         `Urgency: ${job.urgency}. Preferred time: ${job.preferredTime}.`,
         `Details: ${job.description}`,
+        job.expectedPriceKind && job.expectedPriceMinCents && job.expectedPriceMaxCents
+          ? `Expected ${job.expectedPriceKind} range: $${(job.expectedPriceMinCents / 100).toFixed(0)}–$${(job.expectedPriceMaxCents / 100).toFixed(0)}.`
+          : "Expected range unavailable; confirm a diagnostic price before accepting.",
         `This offer expires at ${input.expiresAt.toISOString()}. Sign in to accept or decline.`,
       ].join("\n"),
     });
@@ -1444,10 +1532,13 @@ export class SourceTradieRepository {
     id: number,
     decision: string,
     eta?: string,
+    confirmedPriceKind?: PriceKind,
+    confirmedPriceCents?: number,
   ): Promise<
     | { kind: "ok"; dispatch: DispatchApi }
     | { kind: "not_found" }
     | { kind: "invalid_status" }
+    | { kind: "invalid_acceptance_terms" }
     | { kind: "invalid_transition"; from: string; to: string }
   > {
     if (!isDispatchState(decision)) {
@@ -1480,6 +1571,16 @@ export class SourceTradieRepository {
     }
 
     if (
+      decision === "accepted" &&
+      (!eta?.trim() ||
+        !confirmedPriceKind ||
+        !Number.isInteger(confirmedPriceCents) ||
+        confirmedPriceCents! <= 0)
+    ) {
+      return { kind: "invalid_acceptance_terms" };
+    }
+
+    if (
       existing.expiresAt &&
       new Date(existing.expiresAt).getTime() < Date.now()
     ) {
@@ -1497,6 +1598,10 @@ export class SourceTradieRepository {
       .set({
         state: decision,
         eta: decision === "accepted" ? eta?.trim() || null : null,
+        confirmedPriceKind:
+          decision === "accepted" ? confirmedPriceKind : null,
+        confirmedPriceCents:
+          decision === "accepted" ? confirmedPriceCents : null,
         respondedAt: dispatchTerminalStates.has(decision) ? now : null,
         updatedAt: now,
       })
@@ -1514,17 +1619,23 @@ export class SourceTradieRepository {
     const currentJob = currentJobRows[0];
 
     if (decision === "accepted") {
-      if (currentJob && canTransitionJobStatus(currentJob.status, "accepted")) {
+      if (
+        currentJob &&
+        canTransitionJobStatus(
+          currentJob.status,
+          "awaiting_customer_confirmation",
+        )
+      ) {
         await this.database
           .update(jobsTable)
-          .set({ status: "accepted", updatedAt: now })
+          .set({ status: "awaiting_customer_confirmation", updatedAt: now })
           .where(eq(jobsTable.id, currentJob.id));
 
         await this.database.insert(jobStatusHistoryTable).values({
           jobId: currentJob.id,
           fromStatus: currentJob.status,
-          toStatus: "accepted",
-          note: "dispatch_offer_accepted",
+          toStatus: "awaiting_customer_confirmation",
+          note: "partner_price_and_eta_confirmed",
           createdAt: now,
         });
       }
@@ -1545,11 +1656,11 @@ export class SourceTradieRepository {
           jobId: updated.jobId,
           dispatchOfferId: updated.id,
           recipientType: "customer",
-          type: "offer_accepted",
-          idempotencyKey: `offer:${updated.id}:customer-accepted`,
+          type: "price_ready",
+          idempotencyKey: `offer:${updated.id}:customer-price-ready`,
           to: details.customerEmail,
-          subject: `Tradie confirmed for ${details.reference}`,
-          text: `${details.businessName} (${details.contactName}) accepted your request.${updated.eta ? ` ETA/status: ${updated.eta}.` : ""}`,
+          subject: `Confirm your tradie for ${details.reference}`,
+          text: `${details.businessName} (${details.contactName}) is ready. Confirmed ${updated.confirmedPriceKind} price: $${((updated.confirmedPriceCents ?? 0) / 100).toFixed(2)}. ETA/status: ${updated.eta}. Open your secure status link to confirm and send the tradie. Your exact address remains hidden until you confirm.`,
         });
       }
     }
@@ -1598,8 +1709,116 @@ export class SourceTradieRepository {
         offeredAt: toIso(updated.offeredAt),
         respondedAt: updated.respondedAt ? toIso(updated.respondedAt) : null,
         eta: updated.eta ?? null,
+        confirmedPriceKind:
+          (updated.confirmedPriceKind as PriceKind | null) ?? null,
+        confirmedPriceCents: updated.confirmedPriceCents ?? null,
+        customerConfirmedAt: updated.customerConfirmedAt
+          ? toIso(updated.customerConfirmedAt)
+          : null,
       },
     };
+  }
+
+  async confirmDispatch(
+    jobId: number,
+    token: string,
+  ): Promise<
+    | { kind: "ok"; status: PublicJobStatusApi }
+    | { kind: "not_found" }
+    | { kind: "not_ready" }
+  > {
+    const currentRows = await this.database
+      .select()
+      .from(jobsTable)
+      .where(
+        and(eq(jobsTable.id, jobId), eq(jobsTable.publicStatusToken, token)),
+      )
+      .limit(1);
+    const current = currentRows[0];
+    if (!current) return { kind: "not_found" };
+
+    const offerRows = await this.database
+      .select()
+      .from(dispatchOffersTable)
+      .where(
+        and(
+          eq(dispatchOffersTable.jobId, jobId),
+          eq(dispatchOffersTable.state, "accepted"),
+        ),
+      )
+      .limit(1);
+    const offer = offerRows[0];
+    if (!offer?.eta || !offer.confirmedPriceKind || !offer.confirmedPriceCents) {
+      return { kind: "not_ready" };
+    }
+
+    if (!offer.customerConfirmedAt) {
+      if (current.status !== "awaiting_customer_confirmation") {
+        return { kind: "not_ready" };
+      }
+      const now = new Date();
+      await this.database.transaction(async (tx) => {
+        await tx
+          .update(dispatchOffersTable)
+          .set({ customerConfirmedAt: now, updatedAt: now })
+          .where(eq(dispatchOffersTable.id, offer.id));
+        await tx
+          .update(jobsTable)
+          .set({ status: "accepted", updatedAt: now })
+          .where(eq(jobsTable.id, current.id));
+        await tx.insert(jobStatusHistoryTable).values({
+          jobId: current.id,
+          fromStatus: current.status,
+          toStatus: "accepted",
+          note: "customer_confirmed_dispatch",
+          createdAt: now,
+        });
+      });
+
+      const recipientRows = await this.database
+        .select({
+          partnerEmail: partnersTable.email,
+          customerEmail: jobsTable.customerEmail,
+          reference: jobsTable.reference,
+          businessName: partnersTable.businessName,
+        })
+        .from(dispatchOffersTable)
+        .innerJoin(jobsTable, eq(jobsTable.id, dispatchOffersTable.jobId))
+        .innerJoin(
+          partnersTable,
+          eq(partnersTable.id, dispatchOffersTable.partnerId),
+        )
+        .where(eq(dispatchOffersTable.id, offer.id))
+        .limit(1);
+      const recipients = recipientRows[0];
+      if (recipients) {
+        await this.sendNotification({
+          jobId,
+          dispatchOfferId: offer.id,
+          recipientType: "partner",
+          type: "customer_confirmed",
+          idempotencyKey: `offer:${offer.id}:partner-customer-confirmed`,
+          to: recipients.partnerEmail,
+          subject: `Customer confirmed ${recipients.reference}`,
+          text: `The customer confirmed your price and ETA. Sign in to SourceTradie to view the service details and attend.`,
+        });
+        await this.sendNotification({
+          jobId,
+          dispatchOfferId: offer.id,
+          recipientType: "customer",
+          type: "customer_confirmed",
+          idempotencyKey: `offer:${offer.id}:customer-confirmed`,
+          to: recipients.customerEmail,
+          subject: `Your tradie is confirmed for ${recipients.reference}`,
+          text: `${recipients.businessName} is confirmed at $${(offer.confirmedPriceCents / 100).toFixed(2)} with ETA/status: ${offer.eta}.`,
+        });
+      }
+    } else if (current.status !== "accepted") {
+      return { kind: "not_ready" };
+    }
+
+    const status = await this.getPublicJobStatusByToken(jobId, token);
+    return status ? { kind: "ok", status } : { kind: "not_found" };
   }
 
   async expireDispatchOffer(
@@ -1684,6 +1903,12 @@ export class SourceTradieRepository {
         offeredAt: toIso(updated.offeredAt),
         respondedAt: updated.respondedAt ? toIso(updated.respondedAt) : null,
         eta: updated.eta ?? null,
+        confirmedPriceKind:
+          (updated.confirmedPriceKind as PriceKind | null) ?? null,
+        confirmedPriceCents: updated.confirmedPriceCents ?? null,
+        customerConfirmedAt: updated.customerConfirmedAt
+          ? toIso(updated.customerConfirmedAt)
+          : null,
       },
     };
   }

@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-zod";
 import { db, type db as WorkspaceDb } from "@workspace/db";
 import { SourceTradieRepository } from "../lib/source-tradie-repository";
+import { matchMelbournePricing } from "../lib/pricing";
 import { requireAuth } from "../middlewares/auth";
 import { requireAdmin, requirePartnerOrAdmin } from "../middlewares/authorize";
 
@@ -30,7 +31,16 @@ const DispatchOfferIdParams = z.object({
 const DispatchDecisionBody = z.object({
   decision: z.enum(["accepted", "declined"]),
   eta: z.string().trim().max(160).optional(),
+  confirmedPriceKind: z.enum(["total", "diagnostic"]).optional(),
+  confirmedPriceCents: z.number().int().positive().optional(),
 });
+
+const PricingPreviewBody = z
+  .object({
+    description: z.string().trim().min(4).max(4000),
+    trade: z.string().trim().min(1).max(120),
+  })
+  .strict();
 
 const JobIntakeCorrectionBody = z.object({
   description: z.string().trim().min(4),
@@ -63,6 +73,16 @@ export function createSourceTradieRouter(database: DbLike): IRouter {
       isActive: principal.isActive,
       partnerId: principal.partnerId,
     });
+  });
+
+  router.post("/pricing/preview", (req, res) => {
+    const parsed = PricingPreviewBody.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Pricing preview accepts only a description and trade.",
+      });
+    }
+    return res.json(matchMelbournePricing(parsed.data));
   });
 
   router.post("/jobs", async (req, res) => {
@@ -128,6 +148,30 @@ export function createSourceTradieRouter(database: DbLike): IRouter {
     );
     if (!job) return res.status(404).json({ error: "Job not found." });
     return res.json(job);
+  });
+
+  router.post("/jobs/:id/confirm-dispatch", async (req, res) => {
+    const parsed = GetJobParams.safeParse(req.params);
+    const token =
+      typeof req.query.token === "string" ? req.query.token.trim() : "";
+    if (!parsed.success || token.length < 16) {
+      return res
+        .status(401)
+        .json({ error: "Valid request details and status token are required." });
+    }
+    const result = await repository.confirmDispatch(
+      parsed.data.id,
+      token,
+    );
+    if (result.kind === "not_found") {
+      return res.status(404).json({ error: "Job not found." });
+    }
+    if (result.kind === "not_ready") {
+      return res
+        .status(409)
+        .json({ error: "This request is not ready for customer confirmation." });
+    }
+    return res.json(result.status);
   });
 
   router.get("/jobs", authRequired, requireAdmin, async (_req, res) => {
@@ -378,6 +422,8 @@ export function createSourceTradieRouter(database: DbLike): IRouter {
         params.data.id,
         body.data.decision,
         body.data.eta,
+        body.data.confirmedPriceKind,
+        body.data.confirmedPriceCents,
       );
 
       if (result.kind === "not_found") {
@@ -388,6 +434,12 @@ export function createSourceTradieRouter(database: DbLike): IRouter {
         return res
           .status(400)
           .json({ error: "Invalid dispatch decision value." });
+      }
+
+      if (result.kind === "invalid_acceptance_terms") {
+        return res.status(400).json({
+          error: "A confirmed price type, confirmed price and ETA are required to accept.",
+        });
       }
 
       if (result.kind === "invalid_transition") {

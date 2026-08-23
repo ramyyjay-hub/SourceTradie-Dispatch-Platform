@@ -51,6 +51,10 @@ function buildRepository(
       import.meta.dirname,
       "../../../../lib/db/migrations/0004_phase5_pilot_notifications.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0005_pricing_customer_confirmation.sql",
+    ),
   ];
 
   return Promise.all(
@@ -254,6 +258,9 @@ describe("source tradie repository", () => {
     const accepted = await repository.decideDispatch(
       offerRows[0]!.id,
       "accepted",
+      "45 minutes",
+      "diagnostic",
+      12_000,
     );
     expect(accepted.kind).toBe("ok");
     if (accepted.kind === "ok") {
@@ -271,7 +278,13 @@ describe("source tradie repository", () => {
       .select()
       .from(jobsTable)
       .where(eq(jobsTable.id, job.id));
-    expect(jobRow[0]?.status).toBe("accepted");
+    expect(jobRow[0]?.status).toBe("awaiting_customer_confirmation");
+
+    const confirmed = await repository.confirmDispatch(
+      job.id,
+      job.statusAccessToken,
+    );
+    expect(confirmed.kind).toBe("ok");
 
     expect(canTransitionDispatchState("pending", "accepted")).toBe(true);
     expect(canTransitionDispatchState("accepted", "declined")).toBe(false);
@@ -501,16 +514,23 @@ describe("source tradie repository", () => {
     const pending = await repository.listPartnerOffers(first.id);
     expect(pending[0].job.serviceAddressLine1).toBeNull();
     expect(pending[0].job.customerPhone).toBeNull();
+    expect(
+      (await repository.decideDispatch(created.id, "accepted", "45 minutes"))
+        .kind,
+    ).toBe("invalid_acceptance_terms");
     const accepted = await repository.decideDispatch(
       created.id,
       "accepted",
       "45 minutes",
+      "total",
+      22_000,
     );
     expect(accepted.kind).toBe("ok");
     if (accepted.kind === "ok")
       expect(accepted.dispatch.eta).toBe("45 minutes");
-    const visible = await repository.listPartnerOffers(first.id);
-    expect(visible[0].job.serviceAddressLine1).toBe("12 Secret Street");
+    const acceptedButPrivate = await repository.listPartnerOffers(first.id);
+    expect(acceptedButPrivate[0].job.serviceAddressLine1).toBeNull();
+    expect(acceptedButPrivate[0].job.customerPhone).toBeNull();
     const status = await repository.getPublicJobStatusByToken(
       job.id,
       job.statusAccessToken,
@@ -519,15 +539,42 @@ describe("source tradie repository", () => {
       businessName: "A Plumbing",
       contactName: "Ava",
       eta: "45 minutes",
+      confirmedPriceKind: "total",
+      confirmedPriceCents: 22_000,
+      customerConfirmed: false,
     });
     expect(sent).toHaveLength(2);
+    expect(
+      (await repository.confirmDispatch(job.id, "0".repeat(64))).kind,
+    ).toBe("not_found");
+    const confirmed = await repository.confirmDispatch(
+      job.id,
+      job.statusAccessToken,
+    );
+    expect(confirmed.kind).toBe("ok");
+    const visible = await repository.listPartnerOffers(first.id);
+    expect(visible[0].job.serviceAddressLine1).toBe("12 Secret Street");
+    expect(visible[0].job.customerPhone).toBe("0400999999");
+    expect(
+      (await db.select().from(dispatchOffersTable)).filter(
+        (offer) => offer.jobId === job.id,
+      ),
+    ).toHaveLength(1);
+    const duplicateConfirmation = await repository.confirmDispatch(
+      job.id,
+      job.statusAccessToken,
+    );
+    expect(duplicateConfirmation.kind).toBe("ok");
     const duplicate = await repository.decideDispatch(
       created.id,
       "accepted",
       "later",
+      "total",
+      23_000,
     );
     expect(duplicate.kind).toBe("invalid_transition");
-    expect(await db.select().from(notificationsTable)).toHaveLength(2);
+    expect(sent).toHaveLength(4);
+    expect(await db.select().from(notificationsTable)).toHaveLength(4);
     await client.close();
   });
 

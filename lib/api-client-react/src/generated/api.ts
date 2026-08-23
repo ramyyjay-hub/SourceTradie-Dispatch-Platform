@@ -22,6 +22,7 @@ import type {
 import type {
   AdminSummary,
   AvailabilityInput,
+  ConfirmDispatchParams,
   CorrectJobIntakeParams,
   CreateJobResponse,
   Dispatch,
@@ -39,6 +40,8 @@ import type {
   PartnerInput,
   PartnerOffer,
   PartnerRecommendation,
+  PricingPreviewInput,
+  PricingSnapshot,
   PublicJobStatus
 } from './api.schemas';
 
@@ -146,6 +149,77 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
+
+export const getPreviewPricingUrl = () => {
+
+
+
+
+  return `/api/pricing/preview`
+}
+
+/**
+ * @summary Preview controlled pricing from contact-free job details
+ */
+export const previewPricing = async (pricingPreviewInput: PricingPreviewInput, options?: Parameters<typeof customFetch>[1]): Promise<PricingSnapshot> => {
+
+  return customFetch<PricingSnapshot>(getPreviewPricingUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(pricingPreviewInput)
+  }
+);}
+
+
+
+
+
+export const getPreviewPricingMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewPricing>>, TError,{data: BodyType<PricingPreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewPricing>>, TError,{data: BodyType<PricingPreviewInput>}, TContext> => {
+
+const mutationKey = ['previewPricing'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewPricing>>, {data: BodyType<PricingPreviewInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewPricing(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewPricingMutationResult = NonNullable<Awaited<ReturnType<typeof previewPricing>>>
+    export type PreviewPricingMutationBody = BodyType<PricingPreviewInput>
+    export type PreviewPricingMutationError = ErrorType<void>
+
+    /**
+ * @summary Preview controlled pricing from contact-free job details
+ */
+export const usePreviewPricing = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewPricing>>, TError,{data: BodyType<PricingPreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewPricing>>,
+        TError,
+        {data: BodyType<PricingPreviewInput>},
+        TContext
+      > => {
+      return useMutation(getPreviewPricingMutationOptions(options));
+    }
 
 export const getListJobsUrl = () => {
 
@@ -535,6 +609,86 @@ export const useCorrectJobIntake = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCorrectJobIntakeMutationOptions(options));
+    }
+
+export const getConfirmDispatchUrl = (id: number,
+    params: ConfirmDispatchParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/jobs/${id}/confirm-dispatch?${stringifiedParams}` : `/api/jobs/${id}/confirm-dispatch`
+}
+
+/**
+ * @summary Customer confirms the accepted tradie price and ETA
+ */
+export const confirmDispatch = async (id: number,
+    params: ConfirmDispatchParams, options?: Parameters<typeof customFetch>[1]): Promise<PublicJobStatus> => {
+
+  return customFetch<PublicJobStatus>(getConfirmDispatchUrl(id,params),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getConfirmDispatchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmDispatch>>, TError,{id: number;params: ConfirmDispatchParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmDispatch>>, TError,{id: number;params: ConfirmDispatchParams}, TContext> => {
+
+const mutationKey = ['confirmDispatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmDispatch>>, {id: number;params: ConfirmDispatchParams}> = (props) => {
+          const {id,params} = props ?? {};
+
+          return  confirmDispatch(id,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmDispatchMutationResult = NonNullable<Awaited<ReturnType<typeof confirmDispatch>>>
+
+    export type ConfirmDispatchMutationError = ErrorType<void>
+
+    /**
+ * @summary Customer confirms the accepted tradie price and ETA
+ */
+export const useConfirmDispatch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmDispatch>>, TError,{id: number;params: ConfirmDispatchParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmDispatch>>,
+        TError,
+        {id: number;params: ConfirmDispatchParams},
+        TContext
+      > => {
+      return useMutation(getConfirmDispatchMutationOptions(options));
     }
 
 export const getListPartnersUrl = () => {

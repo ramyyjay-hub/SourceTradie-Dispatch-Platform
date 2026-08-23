@@ -15,11 +15,16 @@ import {
 import { Link, useLocation, useParams, useSearch } from "wouter";
 import {
   getGetJobQueryKey,
+  useConfirmDispatch,
   useCorrectJobIntake,
   useCreateJob,
   useGetJob,
+  usePreviewPricing,
 } from "@workspace/api-client-react";
-import type { CreateJobResponse } from "@workspace/api-client-react";
+import type {
+  CreateJobResponse,
+  PricingSnapshot,
+} from "@workspace/api-client-react";
 import {
   BackLink,
   Brand,
@@ -80,6 +85,7 @@ function RequestFlow({
   const [preferredTimeEdited, setPreferredTimeEdited] = useState(false);
   const [error, setError] = useState("");
   const createJob = useCreateJob();
+  const pricingPreview = usePreviewPricing();
   const urgentSignal = useMemo(
     () => hasUrgentSafetySignal(form.description),
     [form.description],
@@ -119,11 +125,23 @@ function RequestFlow({
     }
     if (step === "details" && form.serviceAddressLine1.trim().length < 3) {
       setError(
-        "Enter the service address. It stays hidden from tradies until one accepts.",
+        "Enter the service address. It stays hidden until you confirm the tradie’s price and ETA.",
       );
       return;
     }
-    setStep(getNextRequestFlowStep(step, urgentSignal));
+    const nextStep = getNextRequestFlowStep(step, urgentSignal);
+    if (nextStep === "review") {
+      pricingPreview.mutate(
+        { data: { description: form.description, trade: form.trade } },
+        {
+          onSuccess: () => setStep("review"),
+          onError: () =>
+            setError("We couldn’t calculate the expected range. Please try again."),
+        },
+      );
+      return;
+    }
+    setStep(nextStep);
   };
 
   const submit = () => {
@@ -162,7 +180,7 @@ function RequestFlow({
             <SectionLabel>New home request</SectionLabel>
             <h1 className="mt-2 max-w-xl text-4xl font-bold leading-[.95] tracking-[-.07em] md:text-6xl">
               {step === "review"
-                ? "You’re in the queue."
+                ? "Review your request."
                 : "Let’s get a clear picture."}
             </h1>
           </div>
@@ -188,7 +206,9 @@ function RequestFlow({
               setPhotos={setPhotos}
             />
           )}
-          {step === "review" && <ReviewStep form={form} />}
+          {step === "review" && (
+            <ReviewStep form={form} pricing={pricingPreview.data} />
+          )}
         </div>
 
         {error && (
@@ -219,9 +239,11 @@ function RequestFlow({
             <button
               className="btn-accent"
               onClick={next}
+              disabled={pricingPreview.isPending}
               data-testid="button-request-next"
             >
-              Continue <ArrowRight size={16} />
+              {pricingPreview.isPending ? "Checking price" : "Continue"}{" "}
+              <ArrowRight size={16} />
             </button>
           ) : (
             <button
@@ -235,7 +257,7 @@ function RequestFlow({
               ) : (
                 <Check size={16} />
               )}
-              {createJob.isPending ? "Sending request" : "Send my request"}
+              {createJob.isPending ? "Finding your tradie" : "Find my tradie"}
             </button>
           )}
         </div>
@@ -522,7 +544,7 @@ function DetailsStep({
         </div>
       </div>
       <p className="text-xs text-[hsl(var(--muted-foreground))]">
-        The exact address is revealed only to the tradie whose offer you accept.
+        The exact address is revealed only after you confirm the tradie’s price and ETA.
       </p>
 
       <div>
@@ -551,7 +573,21 @@ function DetailsStep({
   );
 }
 
-function ReviewStep({ form }: { form: typeof initialForm }) {
+function formatPrice(cents: number): string {
+  return new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: "AUD",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+function ReviewStep({
+  form,
+  pricing,
+}: {
+  form: typeof initialForm;
+  pricing?: PricingSnapshot;
+}) {
   return (
     <div className="animate-rise space-y-4">
       <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6">
@@ -595,13 +631,27 @@ function ReviewStep({ form }: { form: typeof initialForm }) {
         </div>
       </div>
 
+      {pricing && (
+        <div className="rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
+          <SectionLabel>{pricing.customerLabel}</SectionLabel>
+          <p className="mt-2 text-3xl font-bold tracking-[-.04em]">
+            {formatPrice(pricing.minCents)}–{formatPrice(pricing.maxCents)}
+          </p>
+          <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+            {pricing.scope}
+          </p>
+          <p className="mt-3 text-xs font-semibold">
+            Anything outside this scope, including unexpected parts or additional work, requires your approval before proceeding.
+          </p>
+        </div>
+      )}
+
       <div className="flex gap-3 rounded-xl bg-[hsl(var(--secondary)/.1)] p-4 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
         <ShieldCheck
           size={18}
           className="mt-1 shrink-0 text-[hsl(var(--secondary))]"
         />
-        We’ll review the details first. This does not mean a tradie has been
-        matched yet.
+        You’ll receive the tradie’s confirmed price and ETA before they’re dispatched. Your exact address isn’t shared until you approve.
       </div>
     </div>
   );
@@ -609,6 +659,7 @@ function ReviewStep({ form }: { form: typeof initialForm }) {
 
 function RequestStatus({ id, token }: { id: number; token?: string }) {
   const requestToken = token ?? "";
+  const queryClient = useQueryClient();
   const {
     data: job,
     isLoading,
@@ -623,6 +674,7 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
       },
     },
   );
+  const confirmDispatch = useConfirmDispatch();
 
   if (!requestToken || requestToken.length < 16) {
     return (
@@ -728,10 +780,55 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
 
           <div className="mt-8 rounded-xl bg-[hsl(var(--primary-foreground)/.08)] p-4 text-sm leading-6 text-[hsl(var(--primary-foreground)/.68)]">
             {job.acceptedTradie
-              ? `${job.acceptedTradie.businessName} (${job.acceptedTradie.contactName}) accepted your request.${job.acceptedTradie.eta ? ` ETA/status: ${job.acceptedTradie.eta}.` : ""}`
+              ? `${job.acceptedTradie.businessName} (${job.acceptedTradie.contactName}) confirmed a ${job.acceptedTradie.confirmedPriceKind} price of ${job.acceptedTradie.confirmedPriceCents ? formatPrice(job.acceptedTradie.confirmedPriceCents) : "—"}.${job.acceptedTradie.eta ? ` ETA/status: ${job.acceptedTradie.eta}.` : ""}`
               : "Truthful status: no tradie has been confirmed yet. We’ll update this after a tradie accepts."}
           </div>
+          {job.status === "awaiting_customer_confirmation" &&
+            job.acceptedTradie && (
+              <div className="mt-5 rounded-xl bg-[hsl(var(--accent))] p-5 text-[hsl(var(--accent-foreground))]">
+                <p className="font-semibold">
+                  Your exact address and contact details are still hidden.
+                </p>
+                <p className="mt-2 text-sm leading-6">
+                  Confirm only if you approve this price and ETA. Anything outside the described scope requires your approval before work proceeds.
+                </p>
+                <button
+                  className="btn-main mt-4"
+                  disabled={confirmDispatch.isPending}
+                  onClick={() =>
+                    confirmDispatch.mutate(
+                      { id, params: { token: requestToken } },
+                      {
+                        onSuccess: (updated) => {
+                          queryClient.setQueryData(
+                            getGetJobQueryKey(id, { token: requestToken }),
+                            updated,
+                          );
+                        },
+                      },
+                    )
+                  }
+                  data-testid="button-confirm-dispatch"
+                >
+                  {confirmDispatch.isPending
+                    ? "Confirming"
+                    : "Confirm & send my tradie"}
+                </button>
+              </div>
+            )}
         </div>
+
+        {job.expectedPrice && (
+          <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
+            <SectionLabel>{job.expectedPrice.customerLabel}</SectionLabel>
+            <p className="mt-2 text-2xl font-bold">
+              {formatPrice(job.expectedPrice.minCents)}–{formatPrice(job.expectedPrice.maxCents)}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+              {job.expectedPrice.scope}
+            </p>
+          </div>
+        )}
 
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           <div className="rounded-[1.5rem] border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
