@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 export function Brand({ inverse = false }: { inverse?: boolean }) {
   return (
-    <Link href="/" className="inline-flex items-center gap-3" data-testid="link-brand">
+    <Link href="/" className="inline-flex items-center gap-2" data-testid="link-brand">
       <BrandDrillMark />
       <span className={`text-lg font-bold tracking-[-.04em] ${inverse ? 'text-[hsl(var(--sidebar-foreground))]' : ''}`}>
         Source<span className="text-[hsl(var(--accent))]">Tradie</span>
@@ -19,9 +19,9 @@ function BrandDrillMark() {
       src="/source-tradie-drill-256.png"
       alt=""
       aria-hidden="true"
-      width="40"
-      height="40"
-      className="h-10 w-10 shrink-0 rounded-[13px] object-cover"
+      width="44"
+      height="44"
+      className="h-11 w-11 shrink-0 rounded-full object-cover"
       decoding="async"
     />
   );
