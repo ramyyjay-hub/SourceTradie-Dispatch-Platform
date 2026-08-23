@@ -51,6 +51,20 @@ export function createSourceTradieRouter(database: DbLike): IRouter {
   const repository = new SourceTradieRepository(database);
   const authRequired = requireAuth(repository);
 
+  router.get("/auth/me", authRequired, (req, res) => {
+    if (!req.auth) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const principal = req.auth.principal;
+    return res.json({
+      userId: principal.authUserId,
+      role: principal.role,
+      isActive: principal.isActive,
+      partnerId: principal.partnerId,
+    });
+  });
+
   router.post("/jobs", async (req, res) => {
     const parsed = CreateJobBody.safeParse(req.body);
     if (!parsed.success) {

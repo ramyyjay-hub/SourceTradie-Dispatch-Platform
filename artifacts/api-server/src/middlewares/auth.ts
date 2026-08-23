@@ -1,6 +1,16 @@
 import type { RequestHandler } from "express";
-import { SourceTradieRepository } from "../lib/source-tradie-repository";
-import { verifyAccessToken } from "../lib/auth/verify-jwt";
+import type { SourceTradieRepository } from "../lib/source-tradie-repository";
+import {
+  verifyAccessToken,
+  type VerifiedAccessToken,
+} from "../lib/auth/verify-jwt";
+
+type PrincipalRepository = Pick<
+  SourceTradieRepository,
+  "findPrincipalByAuthUserId"
+>;
+
+type AccessTokenVerifier = (token: string) => Promise<VerifiedAccessToken>;
 
 function readBearerToken(authHeader: string | undefined): string | null {
   if (!authHeader) return null;
@@ -10,7 +20,10 @@ function readBearerToken(authHeader: string | undefined): string | null {
   return token.trim() || null;
 }
 
-export function requireAuth(repository: SourceTradieRepository): RequestHandler {
+export function requireAuth(
+  repository: PrincipalRepository,
+  tokenVerifier: AccessTokenVerifier = verifyAccessToken,
+): RequestHandler {
   return async (req, res, next) => {
     try {
       const token = readBearerToken(req.headers.authorization);
@@ -18,7 +31,7 @@ export function requireAuth(repository: SourceTradieRepository): RequestHandler 
         return res.status(401).json({ error: "Authentication required." });
       }
 
-      const verified = await verifyAccessToken(token);
+      const verified = await tokenVerifier(token);
       const principal = await repository.findPrincipalByAuthUserId(verified.subject);
 
       if (!principal || !principal.isActive) {

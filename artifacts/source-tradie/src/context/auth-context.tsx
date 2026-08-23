@@ -10,6 +10,10 @@ import {
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import {
+  fetchAuthPrincipal,
+  type AuthPrincipal,
+} from "@/lib/auth-principal";
 
 type Role = "partner" | "admin" | null;
 
@@ -25,22 +29,10 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function deriveRole(session: Session | null): Role {
-  const roleCandidate =
-    session?.user.user_metadata?.["role"] ??
-    session?.user.app_metadata?.["role"] ??
-    null;
-
-  if (roleCandidate === "partner" || roleCandidate === "admin") {
-    return roleCandidate;
-  }
-
-  return null;
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
+  const [principal, setPrincipal] = useState<AuthPrincipal | null>(null);
 
   const installTokenGetter = useCallback((nextSession: Session | null) => {
     setAuthTokenGetter(async () => nextSession?.access_token ?? null);
@@ -48,22 +40,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let requestSequence = 0;
+
+    const applySession = async (nextSession: Session | null) => {
+      const requestId = ++requestSequence;
+      setSession(nextSession);
+      installTokenGetter(nextSession);
+
+      if (!nextSession) {
+        setPrincipal(null);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const nextPrincipal = await fetchAuthPrincipal(nextSession.access_token);
+        if (mounted && requestId === requestSequence) {
+          setPrincipal(nextPrincipal);
+        }
+      } catch {
+        if (mounted && requestId === requestSequence) {
+          setPrincipal(null);
+        }
+      } finally {
+        if (mounted && requestId === requestSequence) {
+          setLoading(false);
+        }
+      }
+    };
 
     supabase.auth
       .getSession()
       .then(({ data }) => {
         if (!mounted) return;
-        setSession(data.session ?? null);
-        installTokenGetter(data.session ?? null);
+        void applySession(data.session ?? null);
       })
-      .finally(() => {
-        if (mounted) setLoading(false);
+      .catch(() => {
+        if (!mounted) return;
+        void applySession(null);
       });
 
     const { data: authSubscription } = supabase.auth.onAuthStateChange(
       (_event, nextSession) => {
-        setSession(nextSession ?? null);
-        installTokenGetter(nextSession ?? null);
+        void applySession(nextSession ?? null);
       },
     );
 
@@ -88,17 +108,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(() => {
-    const role = deriveRole(session);
     return {
       loading,
       session,
-      role,
-      userId: session?.user.id ?? null,
+      role: principal?.role ?? null,
+      userId: principal?.userId ?? null,
       isAuthenticated: Boolean(session?.access_token),
       signInWithPassword,
       signOut,
     };
-  }, [loading, session, signInWithPassword, signOut]);
+  }, [loading, principal, session, signInWithPassword, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
