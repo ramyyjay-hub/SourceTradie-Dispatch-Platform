@@ -13,7 +13,7 @@ export default function Home() {
             <div className="animate-rise">
               <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] px-3 py-1.5 font-mono-ui text-[10px] uppercase tracking-[.14em] text-[hsl(var(--secondary))] md:mb-4"><span className="status-dot" /> Melbourne, made local</div>
               <h1 className="max-w-3xl text-[clamp(3.5rem,9vw,7.9rem)] font-bold leading-[.87] tracking-[-.085em]">A better way to get a <span className="hero-tradie font-display font-normal italic text-[hsl(var(--secondary))]"><span className="hero-tradie-ghost" aria-hidden="true">tradie.</span><span className="hero-tradie-word">tradie.</span></span></h1>
-              <p className="mt-6 max-w-lg text-lg leading-8 text-[hsl(var(--muted-foreground))] md:mt-5">Tell us what’s going on at home. We’ll ask the right questions, flag anything unsafe, and put your request in front of the right local people.</p>
+              <p className="mt-6 max-w-lg text-lg leading-8 text-[hsl(var(--muted-foreground))] md:mt-5">Tell us what needs to be done at home. We’ll ask the right questions, flag anything unsafe, and find the right local tradie for the job.</p>
               <div className="mt-7 flex flex-col gap-3 sm:flex-row md:mt-6">
                 <Link href="/request" className="btn-accent" data-testid="link-home-request">Source a Tradie <ArrowRight size={17} /></Link>
                 <Link href="/partner" className="btn-quiet border border-[hsl(var(--border))]" data-testid="link-home-partner">I’m a tradie</Link>
