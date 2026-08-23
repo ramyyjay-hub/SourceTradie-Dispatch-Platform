@@ -118,8 +118,8 @@ describe("public job status route", () => {
       };
       expect(status.expectedPrice).toMatchObject({
         code: "plumbing.tap_leak",
-        minCents: 15_000,
-        maxCents: 30_000,
+        minCents: 16_000,
+        maxCents: 26_000,
       });
 
       const invalidTokenResponse = await fetch(
