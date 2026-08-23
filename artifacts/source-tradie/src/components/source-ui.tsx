@@ -4,11 +4,24 @@ import type { ReactNode } from 'react';
 
 export function Brand({ inverse = false }: { inverse?: boolean }) {
   return (
-    <Link href="/" className="inline-flex items-center gap-2" data-testid="link-brand">
-      <BrandDrillMark />
-      <span className={`text-lg font-bold tracking-[-.04em] ${inverse ? 'text-[hsl(var(--sidebar-foreground))]' : ''}`}>
-        Source<span className="text-[hsl(var(--accent))]">Tradie</span>
-      </span>
+    <Link href="/" className="inline-flex items-center" data-testid="link-brand">
+      {inverse ? (
+        <>
+          <BrandDrillMark />
+          <span className="ml-2 text-lg font-bold tracking-[-.04em] text-[hsl(var(--sidebar-foreground))]">
+            Source<span className="text-[hsl(var(--accent))]">Tradie</span>
+          </span>
+        </>
+      ) : (
+        <img
+          src="/source-tradie-logo-lockup.png"
+          alt="SourceTradie"
+          width="768"
+          height="256"
+          className="h-11 w-auto shrink-0 sm:h-12"
+          decoding="async"
+        />
+      )}
     </Link>
   );
 }
