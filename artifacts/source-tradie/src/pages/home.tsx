@@ -12,7 +12,7 @@ export default function Home() {
           <div className="content-wrap grid items-center gap-8 py-10 md:min-h-[500px] md:grid-cols-[1.1fr_.9fr] md:gap-10 md:py-6 lg:min-h-[520px] lg:py-8">
             <div className="animate-rise">
               <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] px-3 py-1.5 font-mono-ui text-[10px] uppercase tracking-[.14em] text-[hsl(var(--secondary))] md:mb-4"><span className="status-dot" /> Melbourne, made local</div>
-              <h1 className="max-w-3xl text-[clamp(3.5rem,9vw,7.9rem)] font-bold leading-[.87] tracking-[-.085em]">A better way to get a <span className="font-display font-normal italic text-[hsl(var(--secondary))]">tradie.</span></h1>
+              <h1 className="max-w-3xl text-[clamp(3.5rem,9vw,7.9rem)] font-bold leading-[.87] tracking-[-.085em]">A better way to get a <span className="hero-tradie font-display font-normal italic text-[hsl(var(--secondary))]"><span className="hero-tradie-ghost" aria-hidden="true">tradie.</span><span className="hero-tradie-word">tradie.</span></span></h1>
               <p className="mt-6 max-w-lg text-lg leading-8 text-[hsl(var(--muted-foreground))] md:mt-5">Tell us what’s going on at home. We’ll ask the right questions, flag anything unsafe, and put your request in front of the right local people.</p>
               <div className="mt-7 flex flex-col gap-3 sm:flex-row md:mt-6">
                 <Link href="/request" className="btn-accent" data-testid="link-home-request">Source a Tradie <ArrowRight size={17} /></Link>

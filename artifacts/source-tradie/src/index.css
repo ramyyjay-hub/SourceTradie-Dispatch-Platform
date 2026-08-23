@@ -119,6 +119,18 @@
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pulse-soft { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes hero-tradie-settle {
+  from { opacity: .15; filter: blur(1px); letter-spacing: .018em; transform: translateY(5px); }
+  to { opacity: 1; filter: blur(0); letter-spacing: 0; transform: translateY(0); }
+}
+
+.hero-tradie { position:relative; display:inline-block; }
+.hero-tradie-ghost { visibility:hidden; }
+.hero-tradie-word { position:absolute; inset:0; animation:hero-tradie-settle 820ms cubic-bezier(.2,.75,.2,1) 120ms both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-tradie-word { animation:none; }
+}
 
 .app-shell { min-height: 100dvh; }
 .content-wrap { width: min(1180px, calc(100% - 2rem)); margin: 0 auto; }
