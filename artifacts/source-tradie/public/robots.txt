@@ -1,2 +1,10 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /partner
+Disallow: /partner/
+Disallow: /request
+Disallow: /request/
+
+Sitemap: https://sourcetradie.com.au/sitemap.xml
