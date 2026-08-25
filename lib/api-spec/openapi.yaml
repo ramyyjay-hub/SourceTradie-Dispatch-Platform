@@ -161,6 +161,45 @@ paths:
         "404":
           description: Job not found
 
+  /jobs/{id}/photos:
+    post:
+      operationId: uploadJobPhotos
+      tags: [jobs]
+      summary: Upload customer job photos using the issued job status token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/JobStatusToken"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photos]
+              properties:
+                photos:
+                  type: array
+                  maxItems: 3
+                  items: { type: string }
+      responses:
+        "201":
+          description: Photos safely processed and stored
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [photos]
+                properties:
+                  photos:
+                    type: array
+                    items: { $ref: "#/components/schemas/JobPhoto" }
+        "400":
+          description: Invalid photo count, size, type, signature or dimensions
+        "401":
+          description: Valid job status token required
+        "404":
+          description: Job not found
+
   /jobs/{id}/confirm-dispatch:
     post:
       operationId: confirmDispatch
@@ -421,6 +460,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/Dispatch"
 
+  /partner/offers/{offerId}/photos/{photoId}:
+    get:
+      operationId: getPartnerOfferPhoto
+      tags: [partners]
+      summary: Fetch a private job photo for an authorized offer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: offerId
+          in: path
+          required: true
+          schema: { type: number, minimum: 1 }
+        - name: photoId
+          in: path
+          required: true
+          schema: { type: number, minimum: 1 }
+      responses:
+        "200":
+          description: Sanitized job photo
+          content:
+            image/webp:
+              schema: { type: string }
+        "401":
+          description: Authentication required
+        "404":
+          description: Photo not found or not authorized
+
 components:
   securitySchemes:
     bearerAuth:
@@ -483,9 +549,6 @@ components:
         customerPhone: { type: ["string", "null"] }
         customerEmail: { type: ["string", "null"] }
         createdAt: { type: string }
-        images:
-          type: array
-          items: { type: string }
         assessment:
           anyOf:
             - $ref: "#/components/schemas/JobAssessment"
@@ -510,7 +573,15 @@ components:
     PublicJobStatus:
       type: object
       required:
-        [reference, status, createdAt, updatedAt, intake, expectedPrice, acceptedTradie]
+        [
+          reference,
+          status,
+          createdAt,
+          updatedAt,
+          intake,
+          expectedPrice,
+          acceptedTradie,
+        ]
       properties:
         reference: { type: string }
         status: { type: string }
@@ -556,9 +627,6 @@ components:
         customerEmail: { type: string }
         serviceAddressLine1: { type: string, minLength: 3 }
         serviceAddressLine2: { type: string }
-        images:
-          type: array
-          items: { type: string }
 
     PricingPreviewInput:
       type: object
@@ -829,6 +897,7 @@ components:
           createdAt,
           updatedAt,
           expectedPrice,
+          photos,
         ]
       properties:
         reference: { type: string }
@@ -838,6 +907,9 @@ components:
         urgency: { type: string }
         preferredTime: { type: string }
         description: { type: string }
+        photos:
+          type: array
+          items: { $ref: "#/components/schemas/JobPhoto" }
         expectedPrice:
           anyOf:
             - $ref: "#/components/schemas/PricingSnapshot"
@@ -849,6 +921,13 @@ components:
         serviceAddressLine2: { type: ["string", "null"] }
         createdAt: { type: string }
         updatedAt: { type: string }
+
+    JobPhoto:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id: { type: number, minimum: 1 }
 
     PartnerRecommendation:
       type: object
@@ -867,7 +946,14 @@ components:
     AcceptedTradie:
       type: object
       required:
-        [businessName, contactName, eta, confirmedPriceKind, confirmedPriceCents, customerConfirmed]
+        [
+          businessName,
+          contactName,
+          eta,
+          confirmedPriceKind,
+          confirmedPriceCents,
+          customerConfirmed,
+        ]
       properties:
         businessName: { type: string }
         contactName: { type: string }

@@ -20,5 +20,4 @@ export interface JobInput {
   /** @minLength 3 */
   serviceAddressLine1: string;
   serviceAddressLine2?: string;
-  images?: string[];
 }

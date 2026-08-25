@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CalendarDays,
   Clock3,
@@ -22,6 +22,7 @@ import {
   StatCard,
   StatusPill,
 } from "@/components/source-ui";
+import { useAuth } from "@/context/auth-context";
 
 export default function PartnerDashboard() {
   const nav = (
@@ -159,6 +160,22 @@ function Dashboard() {
                   </p>
                 </div>
               )}
+              {offer.job?.photos?.length ? (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
+                    Customer job photos
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {offer.job.photos.map((photo) => (
+                      <PrivateOfferPhoto
+                        key={photo.id}
+                        offerId={offer.id}
+                        photoId={photo.id}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               {offer.customerConfirmedAt ? (
                 <div
                   className="mt-4 rounded-xl bg-[hsl(var(--muted))] p-4 text-sm"
@@ -186,11 +203,13 @@ function Dashboard() {
                 </div>
               ) : offer.state === "accepted" ? (
                 <p className="mt-4 rounded-xl bg-[hsl(var(--muted))] p-4 text-sm font-semibold">
-                  Waiting for customer confirmation. Their contact details and exact address remain hidden.
+                  Waiting for customer confirmation. Their contact details and
+                  exact address remain hidden.
                 </p>
               ) : (
                 <p className="mt-4 text-xs text-[hsl(var(--muted-foreground))]">
-                  Customer contact and exact address stay hidden until the customer confirms your price and ETA.
+                  Customer contact and exact address stay hidden until the
+                  customer confirms your price and ETA.
                 </p>
               )}
               {offer.state === "pending" && (
@@ -203,8 +222,7 @@ function Dashboard() {
                         setPriceKinds((current) => ({
                           ...current,
                           [offer.id]: event.target.value as
-                            | "total"
-                            | "diagnostic",
+                            "total" | "diagnostic",
                         }))
                       }
                       data-testid={`select-price-kind-${offer.id}`}
@@ -270,5 +288,54 @@ function Dashboard() {
         </div>
       </section>
     </main>
+  );
+}
+
+function PrivateOfferPhoto({
+  offerId,
+  photoId,
+}: {
+  offerId: number;
+  photoId: number;
+}) {
+  const { session } = useAuth();
+  const [source, setSource] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | null = null;
+    const controller = new AbortController();
+    if (!session?.access_token) return () => controller.abort();
+    void fetch(`/api/partner/offers/${offerId}/photos/${photoId}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("photo_unavailable");
+        return response.blob();
+      })
+      .then((blob) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSource(objectUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [offerId, photoId, session?.access_token]);
+
+  return source ? (
+    <img
+      src={source}
+      alt="Customer-supplied job"
+      className="aspect-[4/3] w-full rounded-xl border object-cover"
+      data-testid={`offer-photo-${photoId}`}
+    />
+  ) : (
+    <div className="aspect-[4/3] animate-pulse rounded-xl border bg-[hsl(var(--muted))]" />
   );
 }

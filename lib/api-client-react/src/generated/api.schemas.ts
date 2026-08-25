@@ -9,25 +9,25 @@ export interface HealthStatus {
   status: string;
 }
 
-export type TradeClassification = typeof TradeClassification[keyof typeof TradeClassification];
-
+export type TradeClassification =
+  (typeof TradeClassification)[keyof typeof TradeClassification];
 
 export const TradeClassification = {
-  plumbing: 'plumbing',
-  electrical: 'electrical',
-  heating_cooling: 'heating_cooling',
-  unsure: 'unsure',
+  plumbing: "plumbing",
+  electrical: "electrical",
+  heating_cooling: "heating_cooling",
+  unsure: "unsure",
 } as const;
 
-export type UrgencyClassification = typeof UrgencyClassification[keyof typeof UrgencyClassification];
-
+export type UrgencyClassification =
+  (typeof UrgencyClassification)[keyof typeof UrgencyClassification];
 
 export const UrgencyClassification = {
-  not_urgent: 'not_urgent',
-  soon: 'soon',
-  today: 'today',
-  emergency: 'emergency',
-  unsure: 'unsure',
+  not_urgent: "not_urgent",
+  soon: "soon",
+  today: "today",
+  emergency: "emergency",
+  unsure: "unsure",
 } as const;
 
 export interface PhotoContext {
@@ -36,61 +36,61 @@ export interface PhotoContext {
   count: number;
 }
 
-export type JobIntakeAssessmentDraftConfidence = typeof JobIntakeAssessmentDraftConfidence[keyof typeof JobIntakeAssessmentDraftConfidence];
-
+export type JobIntakeAssessmentDraftConfidence =
+  (typeof JobIntakeAssessmentDraftConfidence)[keyof typeof JobIntakeAssessmentDraftConfidence];
 
 export const JobIntakeAssessmentDraftConfidence = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
+  low: "low",
+  medium: "medium",
+  high: "high",
 } as const;
 
-export type JobIntakeAssessmentDraftCodesItem = typeof JobIntakeAssessmentDraftCodesItem[keyof typeof JobIntakeAssessmentDraftCodesItem];
-
+export type JobIntakeAssessmentDraftCodesItem =
+  (typeof JobIntakeAssessmentDraftCodesItem)[keyof typeof JobIntakeAssessmentDraftCodesItem];
 
 export const JobIntakeAssessmentDraftCodesItem = {
-  ROUTING_REVIEW: 'ROUTING_REVIEW',
-  URGENCY_REVIEW: 'URGENCY_REVIEW',
-  MANUAL_REVIEW_REQUIRED: 'MANUAL_REVIEW_REQUIRED',
+  ROUTING_REVIEW: "ROUTING_REVIEW",
+  URGENCY_REVIEW: "URGENCY_REVIEW",
+  MANUAL_REVIEW_REQUIRED: "MANUAL_REVIEW_REQUIRED",
 } as const;
 
 export interface JobIntakeAssessmentDraft {
   tradeClassification: TradeClassification;
   urgencyClassification: UrgencyClassification;
   /**
-     * @maxLength 120
-     * @nullable
-     */
+   * @maxLength 120
+   * @nullable
+   */
   suburb: string | null;
   /**
-     * @maxLength 16
-     * @nullable
-     */
+   * @maxLength 16
+   * @nullable
+   */
   postcode: string | null;
   /**
-     * @maxLength 160
-     * @nullable
-     */
+   * @maxLength 160
+   * @nullable
+   */
   preferredAttendanceTime: string | null;
   /**
-     * @maxLength 500
-     * @nullable
-     */
+   * @maxLength 500
+   * @nullable
+   */
   neutralProblemSummary: string | null;
   /**
-     * @maxLength 120
-     * @nullable
-     */
+   * @maxLength 120
+   * @nullable
+   */
   equipment: string | null;
   /**
-     * @maxLength 120
-     * @nullable
-     */
+   * @maxLength 120
+   * @nullable
+   */
   brand: string | null;
   /**
-     * @maxLength 120
-     * @nullable
-     */
+   * @maxLength 120
+   * @nullable
+   */
   model: string | null;
   photoContext: PhotoContext;
   confidence: JobIntakeAssessmentDraftConfidence;
@@ -108,12 +108,12 @@ export interface JobAssessment {
   createdAt: string;
 }
 
-export type PricingSnapshotKind = typeof PricingSnapshotKind[keyof typeof PricingSnapshotKind];
-
+export type PricingSnapshotKind =
+  (typeof PricingSnapshotKind)[keyof typeof PricingSnapshotKind];
 
 export const PricingSnapshotKind = {
-  total: 'total',
-  diagnostic: 'diagnostic',
+  total: "total",
+  diagnostic: "diagnostic",
 } as const;
 
 export interface PricingSnapshot {
@@ -144,7 +144,6 @@ export interface Job {
   /** @nullable */
   customerEmail?: string | null;
   createdAt: string;
-  images?: string[];
   assessment: JobAssessment | null;
   expectedPrice: PricingSnapshot | null;
 }
@@ -178,12 +177,13 @@ export interface CustomerConfirmedIntake {
 /**
  * @nullable
  */
-export type AcceptedTradieConfirmedPriceKind = typeof AcceptedTradieConfirmedPriceKind[keyof typeof AcceptedTradieConfirmedPriceKind] | null;
-
+export type AcceptedTradieConfirmedPriceKind =
+  | (typeof AcceptedTradieConfirmedPriceKind)[keyof typeof AcceptedTradieConfirmedPriceKind]
+  | null;
 
 export const AcceptedTradieConfirmedPriceKind = {
-  total: 'total',
-  diagnostic: 'diagnostic',
+  total: "total",
+  diagnostic: "diagnostic",
 } as const;
 
 export interface AcceptedTradie {
@@ -223,19 +223,18 @@ export interface JobInput {
   /** @minLength 3 */
   serviceAddressLine1: string;
   serviceAddressLine2?: string;
-  images?: string[];
 }
 
 export interface PricingPreviewInput {
   /**
-     * @minLength 4
-     * @maxLength 4000
-     */
+   * @minLength 4
+   * @maxLength 4000
+   */
   description: string;
   /**
-     * @minLength 1
-     * @maxLength 120
-     */
+   * @minLength 1
+   * @maxLength 120
+   */
   trade: string;
 }
 
@@ -301,12 +300,13 @@ export interface AvailabilityInput {
 /**
  * @nullable
  */
-export type DispatchConfirmedPriceKind = typeof DispatchConfirmedPriceKind[keyof typeof DispatchConfirmedPriceKind] | null;
-
+export type DispatchConfirmedPriceKind =
+  | (typeof DispatchConfirmedPriceKind)[keyof typeof DispatchConfirmedPriceKind]
+  | null;
 
 export const DispatchConfirmedPriceKind = {
-  total: 'total',
-  diagnostic: 'diagnostic',
+  total: "total",
+  diagnostic: "diagnostic",
 } as const;
 
 export interface Dispatch {
@@ -327,12 +327,12 @@ export interface Dispatch {
   customerConfirmedAt?: string | null;
 }
 
-export type DispatchDecisionInputConfirmedPriceKind = typeof DispatchDecisionInputConfirmedPriceKind[keyof typeof DispatchDecisionInputConfirmedPriceKind];
-
+export type DispatchDecisionInputConfirmedPriceKind =
+  (typeof DispatchDecisionInputConfirmedPriceKind)[keyof typeof DispatchDecisionInputConfirmedPriceKind];
 
 export const DispatchDecisionInputConfirmedPriceKind = {
-  total: 'total',
-  diagnostic: 'diagnostic',
+  total: "total",
+  diagnostic: "diagnostic",
 } as const;
 
 export interface DispatchDecisionInput {
@@ -353,22 +353,23 @@ export interface DispatchOfferInput {
 /**
  * @nullable
  */
-export type DispatchOfferConfirmedPriceKind = typeof DispatchOfferConfirmedPriceKind[keyof typeof DispatchOfferConfirmedPriceKind] | null;
-
+export type DispatchOfferConfirmedPriceKind =
+  | (typeof DispatchOfferConfirmedPriceKind)[keyof typeof DispatchOfferConfirmedPriceKind]
+  | null;
 
 export const DispatchOfferConfirmedPriceKind = {
-  total: 'total',
-  diagnostic: 'diagnostic',
+  total: "total",
+  diagnostic: "diagnostic",
 } as const;
 
-export type DispatchOfferNotificationStatus = typeof DispatchOfferNotificationStatus[keyof typeof DispatchOfferNotificationStatus];
-
+export type DispatchOfferNotificationStatus =
+  (typeof DispatchOfferNotificationStatus)[keyof typeof DispatchOfferNotificationStatus];
 
 export const DispatchOfferNotificationStatus = {
-  pending: 'pending',
-  sent: 'sent',
-  delivered: 'delivered',
-  failed: 'failed',
+  pending: "pending",
+  sent: "sent",
+  delivered: "delivered",
+  failed: "failed",
 } as const;
 
 export interface DispatchOffer {
@@ -392,6 +393,11 @@ export interface DispatchOffer {
   notificationStatus?: DispatchOfferNotificationStatus;
 }
 
+export interface JobPhoto {
+  /** @minimum 1 */
+  id: number;
+}
+
 export interface PartnerOfferJob {
   reference: string;
   trade: string;
@@ -400,6 +406,7 @@ export interface PartnerOfferJob {
   urgency: string;
   preferredTime: string;
   description: string;
+  photos: JobPhoto[];
   expectedPrice: PricingSnapshot | null;
   /** @nullable */
   customerName?: string | null;
@@ -442,27 +449,42 @@ export interface AdminSummary {
 export type JobStatusTokenParameter = string;
 
 export type GetJobParams = {
-/**
- * @minLength 16
- */
-token: JobStatusTokenParameter;
+  /**
+   * @minLength 16
+   */
+  token: JobStatusTokenParameter;
 };
 
 export type CorrectJobIntakeParams = {
-/**
- * @minLength 16
- */
-token: JobStatusTokenParameter;
+  /**
+   * @minLength 16
+   */
+  token: JobStatusTokenParameter;
+};
+
+export type UploadJobPhotosParams = {
+  /**
+   * @minLength 16
+   */
+  token: JobStatusTokenParameter;
+};
+
+export type UploadJobPhotosBody = {
+  /** @maxItems 3 */
+  photos: string[];
+};
+
+export type UploadJobPhotos201 = {
+  photos: JobPhoto[];
 };
 
 export type ConfirmDispatchParams = {
-/**
- * @minLength 16
- */
-token: JobStatusTokenParameter;
+  /**
+   * @minLength 16
+   */
+  token: JobStatusTokenParameter;
 };
 
 export type ListApprovedPartnersParams = {
-trade?: string;
+  trade?: string;
 };
-

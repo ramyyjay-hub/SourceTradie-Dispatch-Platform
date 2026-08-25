@@ -55,6 +55,7 @@ Required:
 
 - `DATABASE_URL`: Supabase Supavisor transaction-mode URL (port 6543)
 - `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`: server-only access to the private `job-photos` bucket
 - `SUPABASE_JWT_AUDIENCE`: normally `authenticated`
 - `RESEND_API_KEY`
 - `NOTIFICATION_FROM_EMAIL`
@@ -96,6 +97,9 @@ No database, Resend, OpenAI, Supabase service-role, or JWT secret may use a
 ## Supabase configuration
 
 - Production Site URL: `https://sourcetradie.com.au`
+- Apply `supabase/migrations/20260825000000_private_job_photos_bucket.sql`
+  only as part of an approved Production migration. The bucket must remain private;
+  do not add public, anonymous or authenticated-object read policies.
 - Add exact production redirect paths used by confirmation or reset flows.
 - Add preview redirect patterns only when preview authentication is required.
 - Use transaction-mode pooling for the serverless API runtime.

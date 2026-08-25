@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import multer from "multer";
 import { z } from "zod";
 import {
   CreateJobBody,
@@ -15,6 +16,15 @@ import { SourceTradieRepository } from "../lib/source-tradie-repository";
 import { matchMelbournePricing } from "../lib/pricing";
 import { requireAuth } from "../middlewares/auth";
 import { requireAdmin, requirePartnerOrAdmin } from "../middlewares/authorize";
+import {
+  createJobPhotoStorage,
+  createOpaqueJobPhotoKey,
+  canPartnerAccessOfferPhoto,
+  MAX_JOB_PHOTO_BYTES,
+  MAX_JOB_PHOTOS,
+  sanitizeJobPhoto,
+  type JobPhotoStorage,
+} from "../lib/job-photo-storage";
 
 type DbLike = typeof WorkspaceDb;
 
@@ -56,10 +66,26 @@ const JobIntakeCorrectionBody = z.object({
   serviceAddressLine2: z.string().trim().optional(),
 });
 
-export function createSourceTradieRouter(database: DbLike): IRouter {
+type SourceTradieRouterOptions = {
+  jobPhotoStorage?: JobPhotoStorage;
+  tokenVerifier?: (
+    token: string,
+  ) => Promise<{ subject: string; payload: Record<string, unknown> }>;
+};
+
+export function createSourceTradieRouter(
+  database: DbLike,
+  options: SourceTradieRouterOptions = {},
+): IRouter {
   const router: IRouter = Router();
   const repository = new SourceTradieRepository(database);
-  const authRequired = requireAuth(repository);
+  const authRequired = requireAuth(repository, options.tokenVerifier);
+  const receiveJobPhotos = multer({
+    storage: multer.memoryStorage(),
+    limits: { files: MAX_JOB_PHOTOS, fileSize: MAX_JOB_PHOTO_BYTES },
+  }).array("photos", MAX_JOB_PHOTOS);
+  let resolvedPhotoStorage = options.jobPhotoStorage;
+  const photoStorage = () => (resolvedPhotoStorage ??= createJobPhotoStorage());
 
   router.get("/auth/me", authRequired, (req, res) => {
     if (!req.auth) {
@@ -129,17 +155,83 @@ export function createSourceTradieRouter(database: DbLike): IRouter {
     return res.json(job);
   });
 
+  router.post("/jobs/:id/photos", async (req, res) => {
+    const parsed = GetJobParams.safeParse(req.params);
+    const token =
+      typeof req.query.token === "string" ? req.query.token.trim() : "";
+    if (!parsed.success || token.length < 16) {
+      return res
+        .status(401)
+        .json({ error: "A valid status token is required." });
+    }
+    if (!(await repository.jobExistsForStatusToken(parsed.data.id, token))) {
+      return res.status(404).json({ error: "Job not found." });
+    }
+
+    return receiveJobPhotos(req, res, async (uploadError) => {
+      if (uploadError) {
+        return res.status(400).json({
+          error:
+            "Upload up to 3 JPEG, PNG or WebP photos, no larger than 8 MB each.",
+        });
+      }
+      const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+      const storedKeys: string[] = [];
+      let insertedIds: number[] = [];
+      let storage: JobPhotoStorage | undefined;
+      try {
+        const existingCount = await repository.countStoredJobPhotos(
+          parsed.data.id,
+        );
+        if (!files.length || existingCount + files.length > MAX_JOB_PHOTOS) {
+          return res
+            .status(400)
+            .json({ error: "A job may have a maximum of 3 photos." });
+        }
+        const sanitized = await Promise.all(
+          files.map((file) => sanitizeJobPhoto(file.buffer, file.mimetype)),
+        );
+        storage = photoStorage();
+        for (const photo of sanitized) {
+          const key = createOpaqueJobPhotoKey(parsed.data.id);
+          await storage.put(key, photo.data, photo.contentType);
+          storedKeys.push(key);
+        }
+        const inserted = await repository.addStoredJobPhotos(
+          parsed.data.id,
+          storedKeys.map((objectKey) => ({ objectKey })),
+        );
+        insertedIds = inserted.map((row) => row.id);
+        return res
+          .status(201)
+          .json({ photos: inserted.map((photo) => ({ id: photo.id })) });
+      } catch {
+        if (insertedIds.length)
+          await repository
+            .removeStoredJobPhotos(insertedIds)
+            .catch(() => undefined);
+        if (storage) {
+          await Promise.allSettled(
+            storedKeys.map((key) => storage!.delete(key)),
+          );
+        }
+        return res.status(400).json({
+          error:
+            "One or more photos could not be safely processed. Use a valid JPEG, PNG or WebP image.",
+        });
+      }
+    });
+  });
+
   router.patch("/jobs/:id/intake", async (req, res) => {
     const params = GetJobParams.safeParse(req.params);
     const body = JobIntakeCorrectionBody.safeParse(req.body);
     const token =
       typeof req.query.token === "string" ? req.query.token.trim() : "";
     if (!params.success || !body.success || !token) {
-      return res
-        .status(400)
-        .json({
-          error: "Valid request details and status token are required.",
-        });
+      return res.status(400).json({
+        error: "Valid request details and status token are required.",
+      });
     }
     const job = await repository.correctJobIntake(
       params.data.id,
@@ -155,21 +247,18 @@ export function createSourceTradieRouter(database: DbLike): IRouter {
     const token =
       typeof req.query.token === "string" ? req.query.token.trim() : "";
     if (!parsed.success || token.length < 16) {
-      return res
-        .status(401)
-        .json({ error: "Valid request details and status token are required." });
+      return res.status(401).json({
+        error: "Valid request details and status token are required.",
+      });
     }
-    const result = await repository.confirmDispatch(
-      parsed.data.id,
-      token,
-    );
+    const result = await repository.confirmDispatch(parsed.data.id, token);
     if (result.kind === "not_found") {
       return res.status(404).json({ error: "Job not found." });
     }
     if (result.kind === "not_ready") {
-      return res
-        .status(409)
-        .json({ error: "This request is not ready for customer confirmation." });
+      return res.status(409).json({
+        error: "This request is not ready for customer confirmation.",
+      });
     }
     return res.json(result.status);
   });
@@ -438,7 +527,8 @@ export function createSourceTradieRouter(database: DbLike): IRouter {
 
       if (result.kind === "invalid_acceptance_terms") {
         return res.status(400).json({
-          error: "A confirmed price type, confirmed price and ETA are required to accept.",
+          error:
+            "A confirmed price type, confirmed price and ETA are required to accept.",
         });
       }
 
@@ -464,6 +554,52 @@ export function createSourceTradieRouter(database: DbLike): IRouter {
           .json({ error: "No partner profile is linked to this account." });
       }
       return res.json(await repository.listPartnerOffers(principal.partnerId));
+    },
+  );
+
+  router.get(
+    "/partner/offers/:offerId/photos/:photoId",
+    authRequired,
+    requirePartnerOrAdmin,
+    async (req, res) => {
+      const params = z
+        .object({
+          offerId: z.coerce.number().int().positive(),
+          photoId: z.coerce.number().int().positive(),
+        })
+        .safeParse(req.params);
+      if (!params.success)
+        return res.status(404).json({ error: "Photo not found." });
+      const access = await repository.getOfferPhotoAccess(
+        params.data.offerId,
+        params.data.photoId,
+      );
+      if (!access?.storageObjectKey)
+        return res.status(404).json({ error: "Photo not found." });
+
+      const principal = req.auth!.principal;
+      if (principal.role === "partner") {
+        const permitted = canPartnerAccessOfferPhoto({
+          authenticatedPartnerId: principal.partnerId,
+          owningPartnerId: access.partnerId,
+          offerState: access.state,
+          expiresAt: access.expiresAt,
+          jobStatus: access.jobStatus,
+        });
+        if (!permitted)
+          return res.status(404).json({ error: "Photo not found." });
+      }
+
+      const photo = await photoStorage().get(access.storageObjectKey);
+      if (!photo) return res.status(404).json({ error: "Photo not found." });
+      res.set({
+        "Content-Type": photo.contentType,
+        "Content-Disposition": 'inline; filename="job-photo.webp"',
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; img-src 'self'",
+      });
+      return res.send(photo.data);
     },
   );
 

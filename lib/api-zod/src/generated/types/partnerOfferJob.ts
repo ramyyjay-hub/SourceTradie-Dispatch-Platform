@@ -5,7 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { PricingSnapshot } from './pricingSnapshot';
+import type { JobPhoto } from "./jobPhoto";
+import type { PricingSnapshot } from "./pricingSnapshot";
 
 export interface PartnerOfferJob {
   reference: string;
@@ -15,6 +16,7 @@ export interface PartnerOfferJob {
   urgency: string;
   preferredTime: string;
   description: string;
+  photos: JobPhoto[];
   expectedPrice: PricingSnapshot | null;
   /** @nullable */
   customerName?: string | null;

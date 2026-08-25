@@ -118,6 +118,7 @@ export const jobImagesTable = pgTable(
       .notNull()
       .references(() => jobsTable.id, { onDelete: "cascade" }),
     imageName: text("image_name").notNull(),
+    storageObjectKey: text("storage_object_key"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -125,6 +126,9 @@ export const jobImagesTable = pgTable(
   (table) => [
     index("job_images_job_id_idx").on(table.jobId),
     uniqueIndex("job_images_job_id_name_uidx").on(table.jobId, table.imageName),
+    uniqueIndex("job_images_storage_object_key_uidx").on(
+      table.storageObjectKey,
+    ),
   ],
 );
 

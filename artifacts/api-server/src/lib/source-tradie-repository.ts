@@ -160,7 +160,11 @@ const jobStatusTransitions: Record<JobStatus, JobStatus[]> = {
   new: ["reviewing", "cancelled"],
   reviewing: ["awaiting_dispatch", "cancelled"],
   awaiting_dispatch: ["dispatching", "cancelled"],
-  dispatching: ["awaiting_customer_confirmation", "awaiting_dispatch", "cancelled"],
+  dispatching: [
+    "awaiting_customer_confirmation",
+    "awaiting_dispatch",
+    "cancelled",
+  ],
   awaiting_customer_confirmation: ["accepted", "cancelled"],
   accepted: ["in_progress", "cancelled"],
   in_progress: ["completed", "cancelled"],
@@ -345,7 +349,9 @@ export class SourceTradieRepository {
     };
   }
 
-  private pricingFromJob(row: typeof jobsTable.$inferSelect): PricingPreview | null {
+  private pricingFromJob(
+    row: typeof jobsTable.$inferSelect,
+  ): PricingPreview | null {
     if (
       !row.pricingRuleCode ||
       !row.pricingVersion ||
@@ -635,6 +641,74 @@ export class SourceTradieRepository {
       imagesByJobId.get(id) ?? [],
       assessmentsByJobId.get(id) ?? null,
     );
+  }
+
+  async jobExistsForStatusToken(
+    jobId: number,
+    token: string,
+  ): Promise<boolean> {
+    const rows = await this.database
+      .select({ id: jobsTable.id })
+      .from(jobsTable)
+      .where(
+        and(eq(jobsTable.id, jobId), eq(jobsTable.publicStatusToken, token)),
+      )
+      .limit(1);
+    return Boolean(rows[0]);
+  }
+
+  async countStoredJobPhotos(jobId: number): Promise<number> {
+    const rows = await this.database
+      .select({ id: jobImagesTable.id })
+      .from(jobImagesTable)
+      .where(
+        and(
+          eq(jobImagesTable.jobId, jobId),
+          sql`${jobImagesTable.storageObjectKey} is not null`,
+        ),
+      );
+    return rows.length;
+  }
+
+  async addStoredJobPhotos(
+    jobId: number,
+    photos: Array<{ objectKey: string }>,
+  ) {
+    if (!photos.length) return [];
+    return this.database.transaction(async (tx) => {
+      await tx.execute(
+        sql`select ${jobsTable.id} from ${jobsTable} where ${jobsTable.id} = ${jobId} for update`,
+      );
+      const existing = await tx
+        .select({ id: jobImagesTable.id })
+        .from(jobImagesTable)
+        .where(
+          and(
+            eq(jobImagesTable.jobId, jobId),
+            sql`${jobImagesTable.storageObjectKey} is not null`,
+          ),
+        );
+      if (existing.length + photos.length > 3)
+        throw new Error("job_photo_limit");
+      return tx
+        .insert(jobImagesTable)
+        .values(
+          photos.map(({ objectKey }) => ({
+            jobId,
+            imageName: `photo-${crypto.randomUUID()}.webp`,
+            storageObjectKey: objectKey,
+            createdAt: new Date(),
+          })),
+        )
+        .returning({ id: jobImagesTable.id });
+    });
+  }
+
+  async removeStoredJobPhotos(photoIds: number[]): Promise<void> {
+    if (!photoIds.length) return;
+    await this.database
+      .delete(jobImagesTable)
+      .where(inArray(jobImagesTable.id, photoIds));
   }
 
   async getPublicJobStatusByToken(
@@ -1184,6 +1258,23 @@ export class SourceTradieRepository {
       : [];
 
     const jobsById = new Map(jobs.map((job) => [job.id, job]));
+    const photoRows = jobIds.length
+      ? await this.database
+          .select({ id: jobImagesTable.id, jobId: jobImagesTable.jobId })
+          .from(jobImagesTable)
+          .where(
+            and(
+              inArray(jobImagesTable.jobId, jobIds),
+              sql`${jobImagesTable.storageObjectKey} is not null`,
+            ),
+          )
+      : [];
+    const photosByJobId = new Map<number, Array<{ id: number }>>();
+    for (const photo of photoRows) {
+      const current = photosByJobId.get(photo.jobId) ?? [];
+      current.push({ id: photo.id });
+      photosByJobId.set(photo.jobId, current);
+    }
 
     return rows
       .map((row) => {
@@ -1216,6 +1307,12 @@ export class SourceTradieRepository {
             urgency: job.urgency,
             preferredTime: job.preferredTime,
             description: job.description,
+            photos:
+              (row.state === "pending" &&
+                (!row.expiresAt || row.expiresAt > new Date())) ||
+              row.state === "accepted"
+                ? (photosByJobId.get(job.id) ?? [])
+                : [],
             expectedPrice: this.pricingFromJob(job),
             customerName: customerVisible ? job.customerName : null,
             customerPhone: customerVisible ? job.customerPhone : null,
@@ -1364,6 +1461,29 @@ export class SourceTradieRepository {
     return rows[0] ?? null;
   }
 
+  async getOfferPhotoAccess(offerId: number, photoId: number) {
+    const rows = await this.database
+      .select({
+        partnerId: dispatchOffersTable.partnerId,
+        state: dispatchOffersTable.state,
+        expiresAt: dispatchOffersTable.expiresAt,
+        jobStatus: jobsTable.status,
+        storageObjectKey: jobImagesTable.storageObjectKey,
+      })
+      .from(dispatchOffersTable)
+      .innerJoin(jobsTable, eq(jobsTable.id, dispatchOffersTable.jobId))
+      .innerJoin(
+        jobImagesTable,
+        and(
+          eq(jobImagesTable.id, photoId),
+          eq(jobImagesTable.jobId, dispatchOffersTable.jobId),
+        ),
+      )
+      .where(eq(dispatchOffersTable.id, offerId))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   async createDispatchOffer(input: {
     jobId: number;
     partnerId: number;
@@ -1504,7 +1624,9 @@ export class SourceTradieRepository {
         `A ${job.trade} opportunity is available in ${job.suburb} ${job.postcode}.`,
         `Urgency: ${job.urgency}. Preferred time: ${job.preferredTime}.`,
         `Details: ${job.description}`,
-        job.expectedPriceKind && job.expectedPriceMinCents && job.expectedPriceMaxCents
+        job.expectedPriceKind &&
+        job.expectedPriceMinCents &&
+        job.expectedPriceMaxCents
           ? `Expected ${job.expectedPriceKind} range: $${(job.expectedPriceMinCents / 100).toFixed(0)}–$${(job.expectedPriceMaxCents / 100).toFixed(0)}.`
           : "Expected range unavailable; confirm a diagnostic price before accepting.",
         `This offer expires at ${input.expiresAt.toISOString()}. Sign in to accept or decline.`,
@@ -1598,8 +1720,7 @@ export class SourceTradieRepository {
       .set({
         state: decision,
         eta: decision === "accepted" ? eta?.trim() || null : null,
-        confirmedPriceKind:
-          decision === "accepted" ? confirmedPriceKind : null,
+        confirmedPriceKind: decision === "accepted" ? confirmedPriceKind : null,
         confirmedPriceCents:
           decision === "accepted" ? confirmedPriceCents : null,
         respondedAt: dispatchTerminalStates.has(decision) ? now : null,
@@ -1748,7 +1869,11 @@ export class SourceTradieRepository {
       )
       .limit(1);
     const offer = offerRows[0];
-    if (!offer?.eta || !offer.confirmedPriceKind || !offer.confirmedPriceCents) {
+    if (
+      !offer?.eta ||
+      !offer.confirmedPriceKind ||
+      !offer.confirmedPriceCents
+    ) {
       return { kind: "not_ready" };
     }
 

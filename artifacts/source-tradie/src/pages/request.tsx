@@ -81,6 +81,8 @@ function RequestFlow({
   const [step, setStep] = useState<RequestFlowStep>("problem");
   const [form, setForm] = useState(initialForm);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [createdJob, setCreatedJob] = useState<CreateJobResponse | null>(null);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [safetyConfirmed, setSafetyConfirmed] = useState(false);
   const [preferredTimeEdited, setPreferredTimeEdited] = useState(false);
   const [error, setError] = useState("");
@@ -136,7 +138,9 @@ function RequestFlow({
         {
           onSuccess: () => setStep("review"),
           onError: () =>
-            setError("We couldn’t calculate the expected range. Please try again."),
+            setError(
+              "We couldn’t calculate the expected range. Please try again.",
+            ),
         },
       );
       return;
@@ -144,14 +148,40 @@ function RequestFlow({
     setStep(nextStep);
   };
 
+  const uploadAndFinish = async (job: CreateJobResponse) => {
+    if (!photos.length) return onSubmitted(job);
+    setUploadingPhotos(true);
+    try {
+      const body = new FormData();
+      photos.forEach((photo) => body.append("photos", photo));
+      const response = await fetch(
+        `/api/jobs/${job.id}/photos?token=${encodeURIComponent(job.statusAccessToken)}`,
+        { method: "POST", body },
+      );
+      if (!response.ok) throw new Error("photo_upload_failed");
+      onSubmitted(job);
+    } catch {
+      setCreatedJob(job);
+      setError(
+        "Your request was created, but the photos did not upload. Retry below—this will not create another request.",
+      );
+    } finally {
+      setUploadingPhotos(false);
+    }
+  };
+
   const submit = () => {
     setError("");
+    if (createdJob) {
+      void uploadAndFinish(createdJob);
+      return;
+    }
     createJob.mutate(
       {
-        data: { ...form, images: photos.map((photo) => photo.name) },
+        data: form,
       },
       {
-        onSuccess: onSubmitted,
+        onSuccess: (job) => void uploadAndFinish(job),
         onError: () =>
           setError("We couldn’t send that just now. Please try again."),
       },
@@ -217,6 +247,29 @@ function RequestFlow({
             data-testid="error-request"
           >
             {error}
+            {createdJob && (
+              <div className="mt-3 flex flex-col gap-3 border-t border-current/20 pt-3">
+                <label className="text-xs font-semibold" htmlFor="retry-photos">
+                  Choose different photos
+                </label>
+                <input
+                  id="retry-photos"
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(event) =>
+                    setPhotos(Array.from(event.target.files ?? []).slice(0, 3))
+                  }
+                />
+                <button
+                  type="button"
+                  className="btn-quiet w-fit border"
+                  onClick={() => onSubmitted(createdJob)}
+                >
+                  Continue without photos
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -249,15 +302,21 @@ function RequestFlow({
             <button
               className="btn-accent"
               onClick={submit}
-              disabled={createJob.isPending}
+              disabled={createJob.isPending || uploadingPhotos}
               data-testid="button-submit-request"
             >
-              {createJob.isPending ? (
+              {createJob.isPending || uploadingPhotos ? (
                 <LoaderCircle size={16} className="animate-spin" />
               ) : (
                 <Check size={16} />
               )}
-              {createJob.isPending ? "Finding your tradie" : "Find my tradie"}
+              {uploadingPhotos
+                ? "Uploading photos"
+                : createJob.isPending
+                  ? "Finding your tradie"
+                  : createdJob
+                    ? "Retry photo upload"
+                    : "Find my tradie"}
             </button>
           )}
         </div>
@@ -544,7 +603,8 @@ function DetailsStep({
         </div>
       </div>
       <p className="text-xs text-[hsl(var(--muted-foreground))]">
-        The exact address is revealed only after you confirm the tradie’s price and ETA.
+        The exact address is revealed only after you confirm the tradie’s price
+        and ETA.
       </p>
 
       <div>
@@ -558,9 +618,12 @@ function DetailsStep({
           id="photos"
           type="file"
           multiple
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           className="field"
-          onChange={(event) => setPhotos(Array.from(event.target.files ?? []))}
+          onChange={(event) => {
+            const selected = Array.from(event.target.files ?? []);
+            setPhotos(selected.slice(0, 3));
+          }}
           data-testid="input-photos"
         />
         {photos.length > 0 && (
@@ -568,6 +631,10 @@ function DetailsStep({
             {photos.length} photo{photos.length === 1 ? "" : "s"} selected
           </p>
         )}
+        <p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+          Up to 3 JPEG, PNG or WebP photos, 8 MB each. For privacy, avoid faces,
+          house numbers, mail, vehicle plates and documents.
+        </p>
       </div>
     </div>
   );
@@ -641,7 +708,8 @@ function ReviewStep({
             {pricing.scope}
           </p>
           <p className="mt-3 text-xs font-semibold">
-            Anything outside this scope, including unexpected parts or additional work, requires your approval before proceeding.
+            Anything outside this scope, including unexpected parts or
+            additional work, requires your approval before proceeding.
           </p>
         </div>
       )}
@@ -651,7 +719,8 @@ function ReviewStep({
           size={18}
           className="mt-1 shrink-0 text-[hsl(var(--secondary))]"
         />
-        You’ll receive the tradie’s confirmed price and ETA before they’re dispatched. Your exact address isn’t shared until you approve.
+        You’ll receive the tradie’s confirmed price and ETA before they’re
+        dispatched. Your exact address isn’t shared until you approve.
       </div>
     </div>
   );
@@ -741,9 +810,7 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
               <p className="font-mono-ui text-[10px] uppercase tracking-[.14em] text-[hsl(var(--primary-foreground)/.55)]">
                 Current status
               </p>
-              <h2 className="mt-2 text-2xl font-bold">
-                {lifecycle.title}
-              </h2>
+              <h2 className="mt-2 text-2xl font-bold">{lifecycle.title}</h2>
             </div>
             <Clock3 className="text-[hsl(var(--accent))]" size={28} />
           </div>
@@ -758,7 +825,11 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
                       : "border-[hsl(var(--primary-foreground)/.25)] text-[hsl(var(--primary-foreground)/.4)]"
                   }`}
                 >
-                  {index < lifecycle.activeStage ? <Check size={15} /> : index + 1}
+                  {index < lifecycle.activeStage ? (
+                    <Check size={15} />
+                  ) : (
+                    index + 1
+                  )}
                 </div>
                 <span
                   className={
@@ -790,7 +861,9 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
                   Your exact address and contact details are still hidden.
                 </p>
                 <p className="mt-2 text-sm leading-6">
-                  Confirm only if you approve this price and ETA. Anything outside the described scope requires your approval before work proceeds.
+                  Confirm only if you approve this price and ETA. Anything
+                  outside the described scope requires your approval before work
+                  proceeds.
                 </p>
                 <button
                   className="btn-main mt-4"
@@ -822,7 +895,8 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
           <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
             <SectionLabel>{job.expectedPrice.customerLabel}</SectionLabel>
             <p className="mt-2 text-2xl font-bold">
-              {formatPrice(job.expectedPrice.minCents)}–{formatPrice(job.expectedPrice.maxCents)}
+              {formatPrice(job.expectedPrice.minCents)}–
+              {formatPrice(job.expectedPrice.maxCents)}
             </p>
             <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
               {job.expectedPrice.scope}

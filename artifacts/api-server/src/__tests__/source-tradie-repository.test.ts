@@ -55,6 +55,10 @@ function buildRepository(
       import.meta.dirname,
       "../../../../lib/db/migrations/0005_pricing_customer_confirmation.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0006_private_job_photos.sql",
+    ),
   ];
 
   return Promise.all(
@@ -413,6 +417,9 @@ describe("source tradie repository", () => {
       customerName: "Taylor Green",
       images: [],
     });
+    await repository.addStoredJobPhotos(job.id, [
+      { objectKey: `jobs/${job.id}/opaque.webp` },
+    ]);
 
     const created = await repository.createDispatchOffer({
       jobId: job.id,
@@ -440,6 +447,9 @@ describe("source tradie repository", () => {
       (await repository.listPartnerOffers(partner.id))[0]?.job
         .serviceAddressLine1,
     ).toBeNull();
+    expect(
+      (await repository.listPartnerOffers(partner.id))[0]?.job.photos,
+    ).toEqual([]);
 
     await client.close();
   });
@@ -499,6 +509,9 @@ describe("source tradie repository", () => {
       serviceAddressLine1: "12 Secret Street",
       serviceAddressLine2: "Unit 3",
     });
+    const storedPhotos = await repository.addStoredJobPhotos(job.id, [
+      { objectKey: `jobs/${job.id}/opaque.webp` },
+    ]);
     const ranked = await repository.getPartnerRecommendations(job.id);
     expect(ranked?.find((item) => item.eligible)?.partnerId).toBe(first.id);
     const created = await repository.createDispatchOffer({
@@ -514,6 +527,7 @@ describe("source tradie repository", () => {
     const pending = await repository.listPartnerOffers(first.id);
     expect(pending[0].job.serviceAddressLine1).toBeNull();
     expect(pending[0].job.customerPhone).toBeNull();
+    expect(pending[0].job.photos).toEqual([{ id: storedPhotos[0]!.id }]);
     expect(
       (await repository.decideDispatch(created.id, "accepted", "45 minutes"))
         .kind,
@@ -531,6 +545,9 @@ describe("source tradie repository", () => {
     const acceptedButPrivate = await repository.listPartnerOffers(first.id);
     expect(acceptedButPrivate[0].job.serviceAddressLine1).toBeNull();
     expect(acceptedButPrivate[0].job.customerPhone).toBeNull();
+    expect(acceptedButPrivate[0].job.photos).toEqual([
+      { id: storedPhotos[0]!.id },
+    ]);
     const status = await repository.getPublicJobStatusByToken(
       job.id,
       job.statusAccessToken,
