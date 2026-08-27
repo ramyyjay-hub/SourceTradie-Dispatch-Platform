@@ -63,6 +63,10 @@ function buildRepository(
       import.meta.dirname,
       "../../../../lib/db/migrations/0007_partner_application_intake.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0008_partner_application_acknowledgement.sql",
+    ),
   ];
 
   return Promise.all(

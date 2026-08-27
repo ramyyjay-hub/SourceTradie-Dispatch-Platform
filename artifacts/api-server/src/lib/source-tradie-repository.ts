@@ -30,7 +30,9 @@ import {
 } from "./pricing";
 import {
   createNotificationProvider,
+  type EmailMessage,
   type NotificationProvider,
+  type NotificationSendResult,
 } from "./notification-provider";
 
 type DbLike = typeof WorkspaceDb;
@@ -127,6 +129,7 @@ export type PartnerApplicationApi = PartnerApi & {
   email: string;
   submittedAt: string;
   notificationStatus: string;
+  acknowledgementStatus: string;
 };
 
 export type DispatchApi = {
@@ -252,6 +255,16 @@ export class SourceTradieRepository {
     this.assessmentService = new SafeJobAssessmentService(
       provider ?? createServerAiProvider(),
     );
+  }
+
+  private async sendTransactionalEmail(
+    message: EmailMessage,
+  ): Promise<NotificationSendResult> {
+    try {
+      return await this.notificationProvider.sendEmail(message);
+    } catch {
+      return { ok: false, errorCode: "provider_unexpected_failure" };
+    }
   }
 
   private async sendNotification(input: {
@@ -1045,6 +1058,7 @@ export class SourceTradieRepository {
       emergencyJobs: partner.emergencyJobs,
       submittedAt: partner.createdAt.toISOString(),
       notificationStatus: partner.applicationNotificationStatus,
+      acknowledgementStatus: partner.applicationAcknowledgementStatus,
     }));
   }
 
@@ -1533,7 +1547,7 @@ export class SourceTradieRepository {
     if (!stored) throw new Error("partner_application_idempotency_conflict");
 
     if (inserted) {
-      const result = await this.notificationProvider.sendEmail({
+      const internalResult = await this.sendTransactionalEmail({
         to: "partners@sourcetradie.com.au",
         subject: "New SourceTradie Partner Application",
         text: [
@@ -1548,15 +1562,52 @@ export class SourceTradieRepository {
           `Submitted: ${stored.createdAt.toISOString()}`,
         ].join("\n"),
       });
+      const firstName = stored.contactName.trim().split(/\s+/)[0] || "there";
+      const acknowledgementResult = await this.sendTransactionalEmail({
+        to: stored.email,
+        replyTo: "partners@sourcetradie.com.au",
+        subject: "We received your SourceTradie application",
+        text: [
+          `Hi ${firstName},`,
+          "",
+          "Thanks for applying to join the SourceTradie Melbourne North partner network.",
+          "",
+          "We've received your application and our Partner Operations team will review your details.",
+          "",
+          "If your business is suitable for the pilot, we'll contact you regarding the next steps and verification process.",
+          "",
+          "If you have any questions in the meantime, you can reply directly to this email.",
+          "",
+          "Kind regards,",
+          "Ramy Jay",
+          "Partner Operations",
+          "SourceTradie",
+          "sourcetradie.com.au",
+        ].join("\n"),
+      });
       await this.database
         .update(partnersTable)
         .set({
-          applicationNotificationStatus: result.ok ? "sent" : "failed",
-          applicationNotificationProviderMessageId: result.ok
-            ? result.providerMessageId
+          applicationNotificationStatus: internalResult.ok ? "sent" : "failed",
+          applicationNotificationProviderMessageId: internalResult.ok
+            ? internalResult.providerMessageId
             : null,
-          applicationNotificationErrorCode: result.ok ? null : result.errorCode,
-          applicationNotificationSentAt: result.ok ? new Date() : null,
+          applicationNotificationErrorCode: internalResult.ok
+            ? null
+            : internalResult.errorCode,
+          applicationNotificationSentAt: internalResult.ok ? new Date() : null,
+          applicationAcknowledgementStatus: acknowledgementResult.ok
+            ? "sent"
+            : "failed",
+          applicationAcknowledgementProviderMessageId: acknowledgementResult.ok
+            ? acknowledgementResult.providerMessageId
+            : null,
+          applicationAcknowledgementErrorCode: acknowledgementResult.ok
+            ? null
+            : acknowledgementResult.errorCode,
+          applicationAcknowledgementSentAt: acknowledgementResult.ok
+            ? new Date()
+            : null,
           updatedAt: new Date(),
         })
         .where(eq(partnersTable.id, stored.id));

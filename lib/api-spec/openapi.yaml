@@ -869,13 +869,21 @@ components:
       allOf:
         - $ref: "#/components/schemas/Partner"
         - type: object
-          required: [mobile, email, submittedAt, notificationStatus]
+          required:
+            [
+              mobile,
+              email,
+              submittedAt,
+              notificationStatus,
+              acknowledgementStatus,
+            ]
           properties:
             licence: { type: ["string", "null"] }
             mobile: { type: string }
             email: { type: string }
             submittedAt: { type: string, format: date-time }
             notificationStatus: { type: string }
+            acknowledgementStatus: { type: string }
 
     AvailabilityInput:
       type: object

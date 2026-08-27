@@ -1,5 +1,6 @@
 export type EmailMessage = {
   to: string;
+  replyTo?: string;
   subject: string;
   text: string;
 };
@@ -30,6 +31,7 @@ export class ResendNotificationProvider implements NotificationProvider {
         body: JSON.stringify({
           from: this.from,
           to: [message.to],
+          reply_to: message.replyTo,
           subject: message.subject,
           text: message.text,
         }),

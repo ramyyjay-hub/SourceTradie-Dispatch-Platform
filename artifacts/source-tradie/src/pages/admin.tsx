@@ -32,6 +32,7 @@ type PartnerApplication = {
   status: string;
   submittedAt: string;
   notificationStatus: string;
+  acknowledgementStatus: string;
 };
 
 export default function AdminPage() {
@@ -217,7 +218,8 @@ function PartnerApplicationCard({
         </p>
       </div>
       <p className="mt-3 text-xs text-[hsl(var(--muted-foreground))]">
-        Internal notification: {application.notificationStatus}
+        Internal notification: {application.notificationStatus} · Applicant
+        acknowledgement: {application.acknowledgementStatus}
       </p>
     </article>
   );

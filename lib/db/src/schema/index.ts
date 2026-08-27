@@ -230,6 +230,21 @@ export const partnersTable = pgTable(
       "application_notification_sent_at",
       { withTimezone: true },
     ),
+    applicationAcknowledgementStatus: notificationStatusEnum(
+      "application_acknowledgement_status",
+    )
+      .notNull()
+      .default("pending"),
+    applicationAcknowledgementProviderMessageId: text(
+      "application_acknowledgement_provider_message_id",
+    ),
+    applicationAcknowledgementErrorCode: text(
+      "application_acknowledgement_error_code",
+    ),
+    applicationAcknowledgementSentAt: timestamp(
+      "application_acknowledgement_sent_at",
+      { withTimezone: true },
+    ),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

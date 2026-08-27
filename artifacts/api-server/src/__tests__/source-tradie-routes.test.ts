@@ -13,6 +13,7 @@ import {
 } from "@workspace/db/schema";
 import { SourceTradieRepository } from "../lib/source-tradie-repository";
 import type { NotificationProvider } from "../lib/notification-provider";
+import type { EmailMessage } from "../lib/notification-provider";
 
 async function createTestApi(
   options: {
@@ -33,6 +34,7 @@ async function createTestApi(
     "0005_pricing_customer_confirmation.sql",
     "0006_private_job_photos.sql",
     "0007_partner_application_intake.sql",
+    "0008_partner_application_acknowledgement.sql",
   ].map((file) =>
     path.resolve(import.meta.dirname, "../../../../lib/db/migrations", file),
   );
@@ -197,16 +199,22 @@ describe("partner application intake", () => {
     emergencyJobs: false,
   };
 
-  it("stores first, notifies once, deduplicates retries, and restricts review to admins", async () => {
-    const messages: Array<{ to: string; subject: string; text: string }> = [];
+  it("stores first, sends each email once, deduplicates retries, and restricts review to admins", async () => {
+    const messages: EmailMessage[] = [];
+    let databaseForProvider: any;
+    let persistedBeforeEmail = false;
     const api = await createTestApi({
       notificationProvider: {
         sendEmail: async (message) => {
+          persistedBeforeEmail =
+            (await databaseForProvider.select().from(partnersTable)).length ===
+            1;
           messages.push(message);
           return { ok: true, providerMessageId: "synthetic-message-id" };
         },
       },
     });
+    databaseForProvider = api.database;
     try {
       const submit = () =>
         fetch(`${api.baseUrl}/api/partners`, {
@@ -231,7 +239,8 @@ describe("partner application intake", () => {
       const retry = await submit();
       expect(retry.status).toBe(200);
       expect(await retry.json()).toMatchObject({ duplicate: true });
-      expect(messages).toHaveLength(1);
+      expect(messages).toHaveLength(2);
+      expect(persistedBeforeEmail).toBe(true);
       expect(messages[0]).toMatchObject({
         to: "partners@sourcetradie.com.au",
         subject: "New SourceTradie Partner Application",
@@ -242,6 +251,28 @@ describe("partner application intake", () => {
       );
       expect(messages[0].text).toContain("Service areas: Wollert, Epping");
       expect(messages[0].text).toMatch(/Submitted: .*Z/);
+      expect(messages[1]).toEqual({
+        to: application.email,
+        replyTo: "partners@sourcetradie.com.au",
+        subject: "We received your SourceTradie application",
+        text: [
+          "Hi Test,",
+          "",
+          "Thanks for applying to join the SourceTradie Melbourne North partner network.",
+          "",
+          "We've received your application and our Partner Operations team will review your details.",
+          "",
+          "If your business is suitable for the pilot, we'll contact you regarding the next steps and verification process.",
+          "",
+          "If you have any questions in the meantime, you can reply directly to this email.",
+          "",
+          "Kind regards,",
+          "Ramy Jay",
+          "Partner Operations",
+          "SourceTradie",
+          "sourcetradie.com.au",
+        ].join("\n"),
+      });
 
       const stored = await api.database.select().from(partnersTable);
       expect(stored).toHaveLength(1);
@@ -249,6 +280,8 @@ describe("partner application intake", () => {
         status: "pending",
         availability: false,
         applicationNotificationStatus: "sent",
+        applicationAcknowledgementStatus: "sent",
+        applicationAcknowledgementProviderMessageId: "synthetic-message-id",
       });
       expect(
         await api.database.select().from(partnerServiceAreasTable),
@@ -293,6 +326,7 @@ describe("partner application intake", () => {
           mobile: application.mobile,
           email: application.email,
           notificationStatus: "sent",
+          acknowledgementStatus: "sent",
         }),
       ]);
     } finally {
@@ -300,7 +334,7 @@ describe("partner application intake", () => {
     }
   });
 
-  it("keeps a safely reviewable application when internal email fails", async () => {
+  it("keeps a safely reviewable application when both email attempts fail", async () => {
     const api = await createTestApi({
       notificationProvider: {
         sendEmail: async () => ({ ok: false, errorCode: "synthetic_failure" }),
@@ -322,6 +356,42 @@ describe("partner application intake", () => {
       expect(stored[0]).toMatchObject({
         applicationNotificationStatus: "failed",
         applicationNotificationErrorCode: "synthetic_failure",
+        applicationAcknowledgementStatus: "failed",
+        applicationAcknowledgementErrorCode: "synthetic_failure",
+      });
+    } finally {
+      await api.close();
+    }
+  });
+
+  it("keeps the application and attempts both emails when the provider throws", async () => {
+    let attempts = 0;
+    const api = await createTestApi({
+      notificationProvider: {
+        sendEmail: async () => {
+          attempts += 1;
+          throw new Error("synthetic provider exception");
+        },
+      },
+    });
+    try {
+      const response = await fetch(`${api.baseUrl}/api/partners`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...application,
+          submissionId: "50000000-0000-4000-8000-000000000005",
+        }),
+      });
+      expect(response.status).toBe(201);
+      expect(attempts).toBe(2);
+      const stored = await api.database.select().from(partnersTable);
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).toMatchObject({
+        applicationNotificationStatus: "failed",
+        applicationNotificationErrorCode: "provider_unexpected_failure",
+        applicationAcknowledgementStatus: "failed",
+        applicationAcknowledgementErrorCode: "provider_unexpected_failure",
       });
     } finally {
       await api.close();
