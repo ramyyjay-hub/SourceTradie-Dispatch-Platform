@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
@@ -23,10 +23,12 @@ import type {
   EmailMessage,
   NotificationProvider,
 } from "../lib/notification-provider";
+import type { SmsMessage, SmsProvider } from "../lib/sms-provider";
 
 function buildRepository(
   provider?: JobAiProvider,
   notificationProvider?: NotificationProvider,
+  smsProvider?: SmsProvider,
 ) {
   const client = new PGlite();
 
@@ -67,6 +69,10 @@ function buildRepository(
       import.meta.dirname,
       "../../../../lib/db/migrations/0008_partner_application_acknowledgement.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0009_partner_offer_sms.sql",
+    ),
   ];
 
   return Promise.all(
@@ -80,6 +86,7 @@ function buildRepository(
         testDb as any,
         provider,
         notificationProvider,
+        smsProvider,
       ),
       db: testDb,
       client,
@@ -599,7 +606,7 @@ describe("source tradie repository", () => {
     );
     expect(duplicate.kind).toBe("invalid_transition");
     expect(sent).toHaveLength(4);
-    expect(await db.select().from(notificationsTable)).toHaveLength(4);
+    expect(await db.select().from(notificationsTable)).toHaveLength(5);
     await client.close();
   });
 
@@ -667,6 +674,234 @@ describe("source tradie repository", () => {
     ).toBe("awaiting_dispatch");
     await client.close();
   });
+
+  it("sends one privacy-safe SMS to an approved, verified, consenting partner", async () => {
+    const emails: EmailMessage[] = [];
+    const smsMessages: SmsMessage[] = [];
+    const { repository, db, client } = await buildRepository(
+      undefined,
+      {
+        sendEmail: async (message) => {
+          emails.push(message);
+          return { ok: true, providerMessageId: "email-1" };
+        },
+      },
+      {
+        sendSms: async (message) => {
+          smsMessages.push(message);
+          return { ok: true, providerMessageId: "SM-1" };
+        },
+      },
+    );
+    const partner = await repository.createPartner({
+      businessName: "A Plumbing",
+      contactName: "Ava",
+      trade: "Plumbing",
+      mobile: "0412 345 678",
+      email: "ava@example.test",
+      suburbs: ["Epping"],
+      radiusKm: 15,
+      emergencyJobs: false,
+      services: ["Blocked toilets"],
+    });
+    await db
+      .update(partnersTable)
+      .set({
+        status: "approved",
+        availability: true,
+        mobileVerifiedAt: new Date(),
+        jobOfferSmsConsentAt: new Date(),
+      })
+      .where(eq(partnersTable.id, partner.id));
+    const job = await repository.createJob({
+      description:
+        "Customer Jane 0400999999 at 12 Secret Street has a blocked toilet",
+      trade: "Plumbing",
+      suburb: "Epping",
+      postcode: "3076",
+      urgency: "Soon",
+      preferredTime: "Tomorrow",
+      customerName: "Jane Private",
+      customerPhone: "0400999999",
+      customerEmail: "jane@example.test",
+      serviceAddressLine1: "12 Secret Street",
+    });
+
+    const created = await repository.createDispatchOffer({
+      jobId: job.id,
+      partnerId: partner.id,
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    expect(created.kind).toBe("ok");
+    if (created.kind !== "ok") return;
+    expect(created.emailNotificationStatus).toBe("sent");
+    expect(created.smsNotificationStatus).toBe("sent");
+    expect(smsMessages).toHaveLength(1);
+    expect(smsMessages[0]?.to).toBe("+61412345678");
+    expect(smsMessages[0]?.body).toContain(
+      "https://sourcetradie.com.au/partner/dashboard",
+    );
+    expect(smsMessages[0]?.body).not.toMatch(
+      /Jane|0400999999|Secret Street|blocked toilet/i,
+    );
+    expect(smsMessages[0]?.body.length).toBeLessThanOrEqual(160);
+    expect(emails[0]?.text).toContain(
+      "https://sourcetradie.com.au/partner/dashboard",
+    );
+
+    await expect(
+      repository.createDispatchOffer({
+        jobId: job.id,
+        partnerId: partner.id,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      }),
+    ).resolves.toMatchObject({ kind: "active_offer_exists" });
+    expect(smsMessages).toHaveLength(1);
+    const rows = await db.select().from(notificationsTable);
+    expect(rows.filter((row) => row.channel === "sms")).toHaveLength(1);
+    expect(rows.filter((row) => row.channel === "email")).toHaveLength(1);
+    await client.close();
+  });
+
+  it.each([
+    {
+      name: "unverified",
+      mobile: "0412345678",
+      verified: null,
+      consented: new Date(),
+      code: "mobile_not_verified",
+    },
+    {
+      name: "without consent",
+      mobile: "0412345678",
+      verified: new Date(),
+      consented: null,
+      code: "sms_consent_missing",
+    },
+    {
+      name: "with malformed mobile",
+      mobile: "+15551234567",
+      verified: new Date(),
+      consented: new Date(),
+      code: "invalid_australian_mobile",
+    },
+  ])(
+    "does not call SMS for a $name partner",
+    async ({ mobile, verified, consented, code }) => {
+      const smsProvider: SmsProvider = { sendSms: vi.fn() };
+      const { repository, db, client } = await buildRepository(
+        undefined,
+        undefined,
+        smsProvider,
+      );
+      const partner = await repository.createPartner({
+        businessName: "Eligibility Test",
+        contactName: "Tester",
+        trade: "Electrical",
+        mobile,
+        email: "test@example.test",
+        suburbs: ["Epping"],
+        radiusKm: 10,
+        emergencyJobs: false,
+        services: [],
+      });
+      await db.update(partnersTable).set({
+        status: "approved",
+        mobileVerifiedAt: verified,
+        jobOfferSmsConsentAt: consented,
+      });
+      const job = await repository.createJob({
+        description: "Power point needs assessment",
+        trade: "Electrical",
+        suburb: "Epping",
+        postcode: "3076",
+        urgency: "Soon",
+        preferredTime: "Flexible",
+        customerName: "Synthetic Customer",
+      });
+      const created = await repository.createDispatchOffer({
+        jobId: job.id,
+        partnerId: partner.id,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      });
+      expect(created).toMatchObject({
+        kind: "ok",
+        smsNotificationStatus: "failed",
+      });
+      expect(smsProvider.sendSms).not.toHaveBeenCalled();
+      const smsRow = (await db.select().from(notificationsTable)).find(
+        (row) => row.channel === "sms",
+      );
+      expect(smsRow?.errorCode).toBe(code);
+      await client.close();
+    },
+  );
+
+  it.each([
+    { emailOk: true, smsOk: false },
+    { emailOk: false, smsOk: true },
+  ])(
+    "keeps offer active when channels fail independently: $emailOk/$smsOk",
+    async ({ emailOk, smsOk }) => {
+      const { repository, db, client } = await buildRepository(
+        undefined,
+        {
+          sendEmail: async () =>
+            emailOk
+              ? { ok: true, providerMessageId: "email-ok" }
+              : { ok: false, errorCode: "email-test-failure" },
+        },
+        {
+          sendSms: async () =>
+            smsOk
+              ? { ok: true, providerMessageId: "sms-ok" }
+              : { ok: false, errorCode: "sms-test-failure" },
+        },
+      );
+      const partner = await repository.createPartner({
+        businessName: "Channel Test",
+        contactName: "Tester",
+        trade: "Plumbing",
+        mobile: "0412345678",
+        email: "channel@example.test",
+        suburbs: ["Epping"],
+        radiusKm: 10,
+        emergencyJobs: false,
+        services: [],
+      });
+      await db.update(partnersTable).set({
+        status: "approved",
+        mobileVerifiedAt: new Date(),
+        jobOfferSmsConsentAt: new Date(),
+      });
+      const job = await repository.createJob({
+        description: "Tap leak",
+        trade: "Plumbing",
+        suburb: "Epping",
+        postcode: "3076",
+        urgency: "Soon",
+        preferredTime: "Flexible",
+        customerName: "Synthetic Customer",
+      });
+      const created = await repository.createDispatchOffer({
+        jobId: job.id,
+        partnerId: partner.id,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      });
+      expect(created).toMatchObject({
+        kind: "ok",
+        emailNotificationStatus: emailOk ? "sent" : "failed",
+        smsNotificationStatus: smsOk ? "sent" : "failed",
+      });
+      expect((await db.select().from(dispatchOffersTable))[0]?.state).toBe(
+        "pending",
+      );
+      expect((await db.select().from(jobsTable))[0]?.status).toBe(
+        "dispatching",
+      );
+      await client.close();
+    },
+  );
 
   it("applies deterministic safety overrides before the AI provider", async () => {
     let providerCalled = false;

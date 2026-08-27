@@ -942,6 +942,10 @@ components:
         customerConfirmedAt: { type: ["string", "null"] }
         notificationStatus:
           { type: string, enum: [pending, sent, delivered, failed] }
+        emailNotificationStatus:
+          { type: string, enum: [pending, sent, delivered, failed] }
+        smsNotificationStatus:
+          { type: string, enum: [pending, sent, delivered, failed] }
 
     PartnerOffer:
       allOf:

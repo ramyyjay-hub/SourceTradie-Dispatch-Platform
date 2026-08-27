@@ -10,6 +10,7 @@ import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useDecideDispatch,
+  getListPartnerOffersQueryKey,
   useListPartnerOffers,
   useListPartners,
   useUpdatePartnerAvailability,
@@ -23,6 +24,7 @@ import {
   StatusPill,
 } from "@/components/source-ui";
 import { useAuth } from "@/context/auth-context";
+import { partnerOfferPollingInterval } from "@/lib/partner-offer-polling";
 
 export default function PartnerDashboard() {
   const nav = (
@@ -49,8 +51,23 @@ export default function PartnerDashboard() {
 }
 
 function Dashboard() {
+  const auth = useAuth();
   const partners = useListPartners();
-  const offers = useListPartnerOffers();
+  const offers = useListPartnerOffers({
+    query: {
+      queryKey: getListPartnerOffersQueryKey(),
+      enabled: auth.isAuthenticated && auth.isActive && auth.role === "partner",
+      refetchInterval: () =>
+        partnerOfferPollingInterval({
+          isAuthenticated: auth.isAuthenticated,
+          isActive: auth.isActive,
+          isPartner: auth.role === "partner",
+          visibilityState: document.visibilityState,
+        }),
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+    },
+  });
   const availability = useUpdatePartnerAvailability();
   const decide = useDecideDispatch();
   const queryClient = useQueryClient();

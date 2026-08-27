@@ -210,6 +210,10 @@ export const partnersTable = pgTable(
     trade: text("trade").notNull(),
     licence: text("licence"),
     mobile: text("mobile").notNull(),
+    mobileVerifiedAt: timestamp("mobile_verified_at", { withTimezone: true }),
+    jobOfferSmsConsentAt: timestamp("job_offer_sms_consent_at", {
+      withTimezone: true,
+    }),
     email: text("email").notNull(),
     radiusKm: integer("radius_km").notNull().default(15),
     emergencyJobs: boolean("emergency_jobs").notNull().default(false),

@@ -10,10 +10,7 @@ import {
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import {
-  fetchAuthPrincipal,
-  type AuthPrincipal,
-} from "@/lib/auth-principal";
+import { fetchAuthPrincipal, type AuthPrincipal } from "@/lib/auth-principal";
 
 type Role = "partner" | "admin" | null;
 
@@ -23,6 +20,7 @@ type AuthContextValue = {
   role: Role;
   userId: string | null;
   isAuthenticated: boolean;
+  isActive: boolean;
   signInWithPassword: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -55,7 +53,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setLoading(true);
       try {
-        const nextPrincipal = await fetchAuthPrincipal(nextSession.access_token);
+        const nextPrincipal = await fetchAuthPrincipal(
+          nextSession.access_token,
+        );
         if (mounted && requestId === requestSequence) {
           setPrincipal(nextPrincipal);
         }
@@ -93,12 +93,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [installTokenGetter]);
 
-  const signInWithPassword = useCallback(async (email: string, password: string) => {
-    const result = await supabase.auth.signInWithPassword({ email, password });
-    if (result.error) {
-      throw result.error;
-    }
-  }, []);
+  const signInWithPassword = useCallback(
+    async (email: string, password: string) => {
+      const result = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (result.error) {
+        throw result.error;
+      }
+    },
+    [],
+  );
 
   const signOut = useCallback(async () => {
     const result = await supabase.auth.signOut();
@@ -114,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: principal?.role ?? null,
       userId: principal?.userId ?? null,
       isAuthenticated: Boolean(session?.access_token),
+      isActive: principal?.isActive === true,
       signInWithPassword,
       signOut,
     };

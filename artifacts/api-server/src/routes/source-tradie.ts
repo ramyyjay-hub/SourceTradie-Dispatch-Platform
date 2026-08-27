@@ -14,6 +14,7 @@ import {
 import { db, type db as WorkspaceDb } from "@workspace/db";
 import { SourceTradieRepository } from "../lib/source-tradie-repository";
 import type { NotificationProvider } from "../lib/notification-provider";
+import type { SmsProvider } from "../lib/sms-provider";
 import { matchMelbournePricing } from "../lib/pricing";
 import { requireAuth } from "../middlewares/auth";
 import { requireAdmin, requirePartnerOrAdmin } from "../middlewares/authorize";
@@ -74,6 +75,7 @@ const JobIntakeCorrectionBody = z.object({
 type SourceTradieRouterOptions = {
   jobPhotoStorage?: JobPhotoStorage;
   notificationProvider?: NotificationProvider;
+  smsProvider?: SmsProvider;
   tokenVerifier?: (
     token: string,
   ) => Promise<{ subject: string; payload: Record<string, unknown> }>;
@@ -88,6 +90,7 @@ export function createSourceTradieRouter(
     database,
     undefined,
     options.notificationProvider,
+    options.smsProvider,
   );
   const authRequired = requireAuth(repository, options.tokenVerifier);
   const receiveJobPhotos = multer({

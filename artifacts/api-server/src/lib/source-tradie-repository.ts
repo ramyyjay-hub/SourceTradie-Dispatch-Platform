@@ -34,6 +34,41 @@ import {
   type NotificationProvider,
   type NotificationSendResult,
 } from "./notification-provider";
+import {
+  createSmsProvider,
+  isSingleSegmentGsm7,
+  normalizeAustralianMobile,
+  type SmsProvider,
+  type SmsSendResult,
+} from "./sms-provider";
+
+const PARTNER_DASHBOARD_URL = "https://sourcetradie.com.au/partner/dashboard";
+
+function asciiLabel(value: string, fallback: string): string {
+  const normalized = value
+    .normalize("NFKD")
+    .replace(/[^A-Za-z0-9 ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized || fallback;
+}
+
+export function buildPartnerOfferSms(input: {
+  trade: string;
+  suburb: string;
+  expectedPriceMinCents: number | null;
+  expectedPriceMaxCents: number | null;
+}): string {
+  const trade = asciiLabel(input.trade, "trade").toLowerCase();
+  const suburb = asciiLabel(input.suburb, "your area");
+  const price =
+    input.expectedPriceMinCents !== null && input.expectedPriceMaxCents !== null
+      ? `Expected $${Math.round(input.expectedPriceMinCents / 100)}-$${Math.round(input.expectedPriceMaxCents / 100)}. `
+      : "";
+  const detailed = `SourceTradie: New ${trade} job in ${suburb} VIC. ${price}View and respond: ${PARTNER_DASHBOARD_URL}`;
+  if (isSingleSegmentGsm7(detailed)) return detailed;
+  return `SourceTradie: New job offer. View and respond: ${PARTNER_DASHBOARD_URL}`;
+}
 
 type DbLike = typeof WorkspaceDb;
 
@@ -251,6 +286,7 @@ export class SourceTradieRepository {
     private readonly database: DbLike,
     provider?: JobAiProvider,
     private readonly notificationProvider: NotificationProvider = createNotificationProvider(),
+    private readonly smsProvider: SmsProvider = createSmsProvider(),
   ) {
     this.assessmentService = new SafeJobAssessmentService(
       provider ?? createServerAiProvider(),
@@ -276,6 +312,49 @@ export class SourceTradieRepository {
     to: string | null;
     subject: string;
     text: string;
+    channel?: "email";
+  }): Promise<"pending" | "sent" | "delivered" | "failed"> {
+    return this.persistNotification({
+      ...input,
+      channel: "email",
+      missingRecipientCode: "recipient_email_missing",
+      send: (to) =>
+        this.notificationProvider.sendEmail({
+          to,
+          subject: input.subject,
+          text: input.text,
+        }),
+    });
+  }
+
+  private async sendSmsNotification(input: {
+    jobId: number;
+    dispatchOfferId: number;
+    recipientType: "partner";
+    type: "offer_created";
+    idempotencyKey: string;
+    to: string | null;
+    text: string;
+    ineligibleCode?: string;
+  }): Promise<"pending" | "sent" | "delivered" | "failed"> {
+    return this.persistNotification({
+      ...input,
+      channel: "sms",
+      missingRecipientCode: input.ineligibleCode ?? "recipient_mobile_missing",
+      send: (to) => this.smsProvider.sendSms({ to, body: input.text }),
+    });
+  }
+
+  private async persistNotification(input: {
+    jobId: number;
+    dispatchOfferId: number;
+    recipientType: "partner" | "customer";
+    type: "offer_created" | "price_ready" | "customer_confirmed";
+    idempotencyKey: string;
+    channel: "email" | "sms";
+    to: string | null;
+    missingRecipientCode: string;
+    send: (to: string) => Promise<NotificationSendResult | SmsSendResult>;
   }): Promise<"pending" | "sent" | "delivered" | "failed"> {
     const now = new Date();
     const inserted = await this.database
@@ -285,7 +364,7 @@ export class SourceTradieRepository {
         dispatchOfferId: input.dispatchOfferId,
         recipientType: input.recipientType,
         type: input.type,
-        channel: "email",
+        channel: input.channel,
         status: "pending",
         idempotencyKey: input.idempotencyKey,
         createdAt: now,
@@ -301,13 +380,14 @@ export class SourceTradieRepository {
         .limit(1);
       return existing[0]?.status ?? "failed";
     }
-    const result = input.to
-      ? await this.notificationProvider.sendEmail({
-          to: input.to,
-          subject: input.subject,
-          text: input.text,
-        })
-      : { ok: false as const, errorCode: "recipient_email_missing" };
+    let result: NotificationSendResult | SmsSendResult;
+    try {
+      result = input.to
+        ? await input.send(input.to)
+        : { ok: false as const, errorCode: input.missingRecipientCode };
+    } catch {
+      result = { ok: false, errorCode: "provider_unexpected_failure" };
+    }
     const status = result.ok ? "sent" : "failed";
     await this.database
       .update(notificationsTable)
@@ -1260,6 +1340,7 @@ export class SourceTradieRepository {
             offerId: notificationsTable.dispatchOfferId,
             status: notificationsTable.status,
             type: notificationsTable.type,
+            channel: notificationsTable.channel,
           })
           .from(notificationsTable)
           .where(
@@ -1269,9 +1350,16 @@ export class SourceTradieRepository {
             ),
           )
       : [];
-    const notificationByOffer = new Map(
+    const emailNotificationByOffer = new Map(
       notificationRows
-        .filter((row) => row.type === "offer_created")
+        .filter(
+          (row) => row.type === "offer_created" && row.channel === "email",
+        )
+        .map((row) => [row.offerId, row.status]),
+    );
+    const smsNotificationByOffer = new Map(
+      notificationRows
+        .filter((row) => row.type === "offer_created" && row.channel === "sms")
         .map((row) => [row.offerId, row.status]),
     );
 
@@ -1289,7 +1377,9 @@ export class SourceTradieRepository {
       customerConfirmedAt: row.customerConfirmedAt
         ? toIso(row.customerConfirmedAt)
         : null,
-      notificationStatus: notificationByOffer.get(row.id) ?? null,
+      notificationStatus: emailNotificationByOffer.get(row.id) ?? null,
+      emailNotificationStatus: emailNotificationByOffer.get(row.id) ?? null,
+      smsNotificationStatus: smsNotificationByOffer.get(row.id) ?? null,
       job: jobsById.get(row.jobId)
         ? {
             reference: jobsById.get(row.jobId)!.reference,
@@ -1712,6 +1802,8 @@ export class SourceTradieRepository {
         offeredAt: string;
         expiresAt: string | null;
         notificationStatus: string;
+        emailNotificationStatus: string;
+        smsNotificationStatus: string;
         offer: {
           id: number;
           jobId: number;
@@ -1720,6 +1812,8 @@ export class SourceTradieRepository {
           offeredAt: string;
           expiresAt: string | null;
           notificationStatus: string;
+          emailNotificationStatus: string;
+          smsNotificationStatus: string;
         };
       }
     | {
@@ -1768,6 +1862,9 @@ export class SourceTradieRepository {
         id: partnersTable.id,
         status: partnersTable.status,
         email: partnersTable.email,
+        mobile: partnersTable.mobile,
+        mobileVerifiedAt: partnersTable.mobileVerifiedAt,
+        jobOfferSmsConsentAt: partnersTable.jobOfferSmsConsentAt,
         businessName: partnersTable.businessName,
       })
       .from(partnersTable)
@@ -1826,26 +1923,51 @@ export class SourceTradieRepository {
       createdAt: now,
     });
 
-    const notificationStatus = await this.sendNotification({
-      jobId: inserted.jobId,
-      dispatchOfferId: inserted.id,
-      recipientType: "partner",
-      type: "offer_created",
-      idempotencyKey: `offer:${inserted.id}:partner`,
-      to: partner.email,
-      subject: `SourceTradie opportunity ${job.reference}`,
-      text: [
-        `A ${job.trade} opportunity is available in ${job.suburb} ${job.postcode}.`,
-        `Urgency: ${job.urgency}. Preferred time: ${job.preferredTime}.`,
-        `Details: ${job.description}`,
-        job.expectedPriceKind &&
-        job.expectedPriceMinCents &&
-        job.expectedPriceMaxCents
-          ? `Expected ${job.expectedPriceKind} range: $${(job.expectedPriceMinCents / 100).toFixed(0)}–$${(job.expectedPriceMaxCents / 100).toFixed(0)}.`
-          : "Expected range unavailable; confirm a diagnostic price before accepting.",
-        `This offer expires at ${input.expiresAt.toISOString()}. Sign in to accept or decline.`,
-      ].join("\n"),
-    });
+    const normalizedMobile = normalizeAustralianMobile(partner.mobile);
+    const smsIneligibleCode =
+      partner.status !== "approved"
+        ? "partner_not_approved"
+        : !partner.mobileVerifiedAt
+          ? "mobile_not_verified"
+          : !partner.jobOfferSmsConsentAt
+            ? "sms_consent_missing"
+            : !normalizedMobile
+              ? "invalid_australian_mobile"
+              : undefined;
+    const [emailNotificationStatus, smsNotificationStatus] = await Promise.all([
+      this.sendNotification({
+        jobId: inserted.jobId,
+        dispatchOfferId: inserted.id,
+        recipientType: "partner",
+        type: "offer_created",
+        idempotencyKey: `offer:${inserted.id}:partner:email`,
+        to: partner.email,
+        subject: `SourceTradie opportunity ${job.reference}`,
+        text: [
+          `A ${job.trade} opportunity is available in ${job.suburb} ${job.postcode}.`,
+          `Urgency: ${job.urgency}. Preferred time: ${job.preferredTime}.`,
+          `Details: ${job.description}`,
+          job.expectedPriceKind &&
+          job.expectedPriceMinCents !== null &&
+          job.expectedPriceMaxCents !== null
+            ? `Expected ${job.expectedPriceKind} range: $${(job.expectedPriceMinCents / 100).toFixed(0)}–$${(job.expectedPriceMaxCents / 100).toFixed(0)}.`
+            : "Expected range unavailable; confirm a diagnostic price before accepting.",
+          `This offer expires at ${input.expiresAt.toISOString()}.`,
+          `View and respond: ${PARTNER_DASHBOARD_URL}`,
+        ].join("\n"),
+      }),
+      this.sendSmsNotification({
+        jobId: inserted.jobId,
+        dispatchOfferId: inserted.id,
+        recipientType: "partner",
+        type: "offer_created",
+        idempotencyKey: `offer:${inserted.id}:partner:sms`,
+        to: smsIneligibleCode ? null : normalizedMobile,
+        ineligibleCode: smsIneligibleCode,
+        text: buildPartnerOfferSms(job),
+      }),
+    ]);
+    const notificationStatus = emailNotificationStatus;
     const offer = {
       id: inserted.id,
       jobId: inserted.jobId,
@@ -1854,12 +1976,16 @@ export class SourceTradieRepository {
       offeredAt: toIso(inserted.offeredAt),
       expiresAt: inserted.expiresAt ? toIso(inserted.expiresAt) : null,
       notificationStatus,
+      emailNotificationStatus,
+      smsNotificationStatus,
     };
 
     return {
       kind: "ok",
       ...offer,
       notificationStatus,
+      emailNotificationStatus,
+      smsNotificationStatus,
       offer,
     };
   }
