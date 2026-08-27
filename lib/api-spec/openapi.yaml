@@ -258,7 +258,34 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Partner"
+                $ref: "#/components/schemas/PartnerApplicationReceipt"
+        "200":
+          description: Previously submitted application safely acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerApplicationReceipt"
+
+  /admin/partner-applications:
+    get:
+      operationId: listPendingPartnerApplications
+      tags: [admin]
+      summary: List pending partner applications for admin review
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Pending partner applications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PartnerApplication"
+        "401":
+          description: Authentication required
+        "403":
+          description: Admin access required
 
   /partners/{id}/availability:
     patch:
@@ -799,8 +826,20 @@ components:
     PartnerInput:
       type: object
       required:
-        [businessName, contactName, trade, mobile, email, suburbs, radiusKm]
+        [
+          submissionId,
+          businessName,
+          contactName,
+          trade,
+          mobile,
+          email,
+          suburbs,
+          radiusKm,
+        ]
       properties:
+        submissionId:
+          type: string
+          pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
         businessName: { type: string }
         contactName: { type: string }
         abn: { type: string }
@@ -816,6 +855,27 @@ components:
           type: array
           items: { type: string }
         emergencyJobs: { type: boolean }
+
+    PartnerApplicationReceipt:
+      type: object
+      required: [id, status, submittedAt, duplicate]
+      properties:
+        id: { type: number }
+        status: { type: string }
+        submittedAt: { type: string, format: date-time }
+        duplicate: { type: boolean }
+
+    PartnerApplication:
+      allOf:
+        - $ref: "#/components/schemas/Partner"
+        - type: object
+          required: [mobile, email, submittedAt, notificationStatus]
+          properties:
+            licence: { type: ["string", "null"] }
+            mobile: { type: string }
+            email: { type: string }
+            submittedAt: { type: string, format: date-time }
+            notificationStatus: { type: string }
 
     AvailabilityInput:
       type: object

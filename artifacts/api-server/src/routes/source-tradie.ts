@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-zod";
 import { db, type db as WorkspaceDb } from "@workspace/db";
 import { SourceTradieRepository } from "../lib/source-tradie-repository";
+import type { NotificationProvider } from "../lib/notification-provider";
 import { matchMelbournePricing } from "../lib/pricing";
 import { requireAuth } from "../middlewares/auth";
 import { requireAdmin, requirePartnerOrAdmin } from "../middlewares/authorize";
@@ -52,6 +53,10 @@ const PricingPreviewBody = z
   })
   .strict();
 
+const PartnerApplicationBody = CreatePartnerBody.extend({
+  submissionId: z.string().uuid(),
+});
+
 const JobIntakeCorrectionBody = z.object({
   description: z.string().trim().min(4),
   trade: z.string().trim().min(1),
@@ -68,6 +73,7 @@ const JobIntakeCorrectionBody = z.object({
 
 type SourceTradieRouterOptions = {
   jobPhotoStorage?: JobPhotoStorage;
+  notificationProvider?: NotificationProvider;
   tokenVerifier?: (
     token: string,
   ) => Promise<{ subject: string; payload: Record<string, unknown> }>;
@@ -78,7 +84,11 @@ export function createSourceTradieRouter(
   options: SourceTradieRouterOptions = {},
 ): IRouter {
   const router: IRouter = Router();
-  const repository = new SourceTradieRepository(database);
+  const repository = new SourceTradieRepository(
+    database,
+    undefined,
+    options.notificationProvider,
+  );
   const authRequired = requireAuth(repository, options.tokenVerifier);
   const receiveJobPhotos = multer({
     storage: multer.memoryStorage(),
@@ -306,6 +316,15 @@ export function createSourceTradieRouter(
     },
   );
 
+  router.get(
+    "/admin/partner-applications",
+    authRequired,
+    requireAdmin,
+    async (_req, res) => {
+      res.json(await repository.listPendingPartnerApplications());
+    },
+  );
+
   router.post(
     "/admin/dispatch-offers",
     authRequired,
@@ -403,15 +422,20 @@ export function createSourceTradieRouter(
   });
 
   router.post("/partners", async (req, res) => {
-    const parsed = CreatePartnerBody.safeParse(req.body);
+    const parsed = PartnerApplicationBody.safeParse(req.body);
     if (!parsed.success) {
       return res
         .status(400)
         .json({ error: "Please complete the required partner details." });
     }
 
-    const partner = await repository.createPartner(parsed.data);
-    return res.status(201).json(partner);
+    const result = await repository.submitPartnerApplication(parsed.data);
+    return res.status(result.duplicate ? 200 : 201).json({
+      id: result.application.id,
+      status: result.application.status,
+      submittedAt: result.application.submittedAt,
+      duplicate: result.duplicate,
+    });
   });
 
   router.get(

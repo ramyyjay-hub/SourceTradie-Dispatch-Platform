@@ -59,6 +59,10 @@ function buildRepository(
       import.meta.dirname,
       "../../../../lib/db/migrations/0006_private_job_photos.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0007_partner_application_intake.sql",
+    ),
   ];
 
   return Promise.all(

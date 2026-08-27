@@ -121,6 +121,14 @@ export type PartnerApi = {
   emergencyJobs: boolean;
 };
 
+export type PartnerApplicationApi = PartnerApi & {
+  licence: string | null;
+  mobile: string;
+  email: string;
+  submittedAt: string;
+  notificationStatus: string;
+};
+
 export type DispatchApi = {
   id: number;
   jobId: number;
@@ -996,6 +1004,50 @@ export class SourceTradieRepository {
     return all.filter((partner) => partner.id === partnerId);
   }
 
+  async listPendingPartnerApplications(): Promise<PartnerApplicationApi[]> {
+    const partners = await this.database
+      .select()
+      .from(partnersTable)
+      .where(eq(partnersTable.status, "pending"))
+      .orderBy(desc(partnersTable.createdAt));
+    const ids = partners.map((partner) => partner.id);
+    const areas = ids.length
+      ? await this.database
+          .select()
+          .from(partnerServiceAreasTable)
+          .where(inArray(partnerServiceAreasTable.partnerId, ids))
+      : [];
+    const services = ids.length
+      ? await this.database
+          .select()
+          .from(partnerServicesTable)
+          .where(inArray(partnerServicesTable.partnerId, ids))
+      : [];
+
+    return partners.map((partner) => ({
+      id: partner.id,
+      businessName: partner.businessName,
+      contactName: partner.contactName,
+      abn: partner.abn ?? null,
+      trade: partner.trade,
+      licence: partner.licence ?? null,
+      mobile: partner.mobile,
+      email: partner.email,
+      suburbs: areas
+        .filter((area) => area.partnerId === partner.id)
+        .map((area) => area.suburb),
+      radiusKm: partner.radiusKm,
+      availability: partner.availability,
+      status: partner.status,
+      services: services
+        .filter((service) => service.partnerId === partner.id)
+        .map((service) => service.service),
+      emergencyJobs: partner.emergencyJobs,
+      submittedAt: partner.createdAt.toISOString(),
+      notificationStatus: partner.applicationNotificationStatus,
+    }));
+  }
+
   async listJobsAwaitingDispatch(): Promise<JobApi[]> {
     const rows = await this.database
       .select()
@@ -1404,6 +1456,117 @@ export class SourceTradieRepository {
         emergencyJobs: partner.emergencyJobs,
       };
     });
+  }
+
+  async submitPartnerApplication(input: {
+    submissionId: string;
+    businessName: string;
+    contactName: string;
+    abn?: string;
+    trade: string;
+    licence?: string;
+    mobile: string;
+    email: string;
+    suburbs: string[];
+    radiusKm: number;
+    services?: string[];
+    emergencyJobs?: boolean;
+  }): Promise<{ application: PartnerApplicationApi; duplicate: boolean }> {
+    const inserted = await this.database.transaction(async (tx) => {
+      const now = new Date();
+      const rows = await tx
+        .insert(partnersTable)
+        .values({
+          applicationSubmissionId: input.submissionId,
+          businessName: input.businessName,
+          contactName: input.contactName,
+          abn: input.abn || null,
+          trade: input.trade,
+          licence: input.licence || null,
+          mobile: input.mobile,
+          email: input.email,
+          radiusKm: input.radiusKm,
+          emergencyJobs: input.emergencyJobs ?? false,
+          availability: false,
+          status: "pending",
+          applicationNotificationStatus: "pending",
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing()
+        .returning();
+      const partner = rows[0];
+      if (!partner) return null;
+
+      const suburbs = uniqueNormalized(input.suburbs);
+      const services = uniqueNormalized(input.services ?? []);
+      if (suburbs.length) {
+        await tx.insert(partnerServiceAreasTable).values(
+          suburbs.map((suburb) => ({
+            partnerId: partner.id,
+            suburb,
+            createdAt: now,
+          })),
+        );
+      }
+      if (services.length) {
+        await tx.insert(partnerServicesTable).values(
+          services.map((service) => ({
+            partnerId: partner.id,
+            service,
+            createdAt: now,
+          })),
+        );
+      }
+      return partner;
+    });
+
+    const stored =
+      inserted ??
+      (
+        await this.database
+          .select()
+          .from(partnersTable)
+          .where(eq(partnersTable.applicationSubmissionId, input.submissionId))
+          .limit(1)
+      )[0];
+    if (!stored) throw new Error("partner_application_idempotency_conflict");
+
+    if (inserted) {
+      const result = await this.notificationProvider.sendEmail({
+        to: "partners@sourcetradie.com.au",
+        subject: "New SourceTradie Partner Application",
+        text: [
+          "New SourceTradie Partner Application",
+          "",
+          `Contact name: ${stored.contactName}`,
+          `Business name: ${stored.businessName}`,
+          `Trade: ${stored.trade}`,
+          `Mobile: ${stored.mobile}`,
+          `Email: ${stored.email}`,
+          `Service areas: ${uniqueNormalized(input.suburbs).join(", ")}`,
+          `Submitted: ${stored.createdAt.toISOString()}`,
+        ].join("\n"),
+      });
+      await this.database
+        .update(partnersTable)
+        .set({
+          applicationNotificationStatus: result.ok ? "sent" : "failed",
+          applicationNotificationProviderMessageId: result.ok
+            ? result.providerMessageId
+            : null,
+          applicationNotificationErrorCode: result.ok ? null : result.errorCode,
+          applicationNotificationSentAt: result.ok ? new Date() : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(partnersTable.id, stored.id));
+    }
+
+    const application = (await this.listPendingPartnerApplications()).find(
+      (candidate) => candidate.id === stored.id,
+    );
+    if (!application) throw new Error("partner_application_not_found");
+    return { application, duplicate: !inserted };
   }
 
   async updatePartnerAvailability(

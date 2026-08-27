@@ -203,6 +203,7 @@ export const partnersTable = pgTable(
   {
     id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
     authUserId: uuid("auth_user_id"),
+    applicationSubmissionId: uuid("application_submission_id"),
     businessName: text("business_name").notNull(),
     contactName: text("contact_name").notNull(),
     abn: text("abn"),
@@ -214,6 +215,21 @@ export const partnersTable = pgTable(
     emergencyJobs: boolean("emergency_jobs").notNull().default(false),
     availability: boolean("availability").notNull().default(false),
     status: partnerStatusEnum("status").notNull().default("pending"),
+    applicationNotificationStatus: notificationStatusEnum(
+      "application_notification_status",
+    )
+      .notNull()
+      .default("pending"),
+    applicationNotificationProviderMessageId: text(
+      "application_notification_provider_message_id",
+    ),
+    applicationNotificationErrorCode: text(
+      "application_notification_error_code",
+    ),
+    applicationNotificationSentAt: timestamp(
+      "application_notification_sent_at",
+      { withTimezone: true },
+    ),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -223,6 +239,9 @@ export const partnersTable = pgTable(
   },
   (table) => [
     uniqueIndex("partners_auth_user_id_uidx").on(table.authUserId),
+    uniqueIndex("partners_application_submission_id_uidx")
+      .on(table.applicationSubmissionId)
+      .where(sql`application_submission_id IS NOT NULL`),
     index("partners_status_idx").on(table.status),
     index("partners_availability_idx").on(table.availability),
   ],

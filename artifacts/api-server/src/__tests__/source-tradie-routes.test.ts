@@ -6,10 +6,20 @@ import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { appUsersTable, partnersTable } from "@workspace/db/schema";
+import {
+  appUsersTable,
+  partnerServiceAreasTable,
+  partnersTable,
+} from "@workspace/db/schema";
 import { SourceTradieRepository } from "../lib/source-tradie-repository";
+import type { NotificationProvider } from "../lib/notification-provider";
 
-async function createTestApi(options: { failOnPhotoPut?: number } = {}) {
+async function createTestApi(
+  options: {
+    failOnPhotoPut?: number;
+    notificationProvider?: NotificationProvider;
+  } = {},
+) {
   process.env.DATABASE_URL ??= "postgres://localhost/source_tradie_test";
   process.env.SUPABASE_URL ??= "https://supabase.test";
   const { createSourceTradieRouter } = await import("../routes/source-tradie");
@@ -22,6 +32,7 @@ async function createTestApi(options: { failOnPhotoPut?: number } = {}) {
     "0004_phase5_pilot_notifications.sql",
     "0005_pricing_customer_confirmation.sql",
     "0006_private_job_photos.sql",
+    "0007_partner_application_intake.sql",
   ].map((file) =>
     path.resolve(import.meta.dirname, "../../../../lib/db/migrations", file),
   );
@@ -55,6 +66,7 @@ async function createTestApi(options: { failOnPhotoPut?: number } = {}) {
     "/api",
     createSourceTradieRouter(database, {
       jobPhotoStorage,
+      notificationProvider: options.notificationProvider,
       tokenVerifier: async (token) => ({
         subject: token,
         payload: { sub: token },
@@ -163,6 +175,154 @@ describe("public job status route", () => {
         `${api.baseUrl}/api/jobs/${created.id}?token=${"0".repeat(64)}`,
       );
       expect(invalidTokenResponse.status).toBe(404);
+    } finally {
+      await api.close();
+    }
+  });
+});
+
+describe("partner application intake", () => {
+  const application = {
+    submissionId: "10000000-0000-4000-8000-000000000001",
+    businessName: "Synthetic Northern Plumbing",
+    contactName: "Test Applicant",
+    abn: "11111111111",
+    trade: "Plumbing",
+    licence: "SYNTHETIC-ONLY",
+    mobile: "0400000000",
+    email: "partner-application@example.test",
+    suburbs: ["Wollert", "Epping"],
+    radiusKm: 15,
+    services: ["Repairs"],
+    emergencyJobs: false,
+  };
+
+  it("stores first, notifies once, deduplicates retries, and restricts review to admins", async () => {
+    const messages: Array<{ to: string; subject: string; text: string }> = [];
+    const api = await createTestApi({
+      notificationProvider: {
+        sendEmail: async (message) => {
+          messages.push(message);
+          return { ok: true, providerMessageId: "synthetic-message-id" };
+        },
+      },
+    });
+    try {
+      const submit = () =>
+        fetch(`${api.baseUrl}/api/partners`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(application),
+        });
+      const first = await submit();
+      expect(first.status).toBe(201);
+      const receipt = (await first.json()) as Record<string, unknown>;
+      expect(receipt).toMatchObject({
+        status: "pending",
+        duplicate: false,
+      });
+      expect(Object.keys(receipt).sort()).toEqual([
+        "duplicate",
+        "id",
+        "status",
+        "submittedAt",
+      ]);
+
+      const retry = await submit();
+      expect(retry.status).toBe(200);
+      expect(await retry.json()).toMatchObject({ duplicate: true });
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        to: "partners@sourcetradie.com.au",
+        subject: "New SourceTradie Partner Application",
+      });
+      expect(messages[0].text).toContain("Contact name: Test Applicant");
+      expect(messages[0].text).toContain(
+        "Business name: Synthetic Northern Plumbing",
+      );
+      expect(messages[0].text).toContain("Service areas: Wollert, Epping");
+      expect(messages[0].text).toMatch(/Submitted: .*Z/);
+
+      const stored = await api.database.select().from(partnersTable);
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).toMatchObject({
+        status: "pending",
+        availability: false,
+        applicationNotificationStatus: "sent",
+      });
+      expect(
+        await api.database.select().from(partnerServiceAreasTable),
+      ).toHaveLength(2);
+
+      const unauthenticated = await fetch(
+        `${api.baseUrl}/api/admin/partner-applications`,
+      );
+      expect(unauthenticated.status).toBe(401);
+
+      const partnerAuthId = "20000000-0000-4000-8000-000000000002";
+      await api.database
+        .update(partnersTable)
+        .set({ authUserId: partnerAuthId })
+        .where(eq(partnersTable.id, stored[0].id));
+      await api.database.insert(appUsersTable).values({
+        authUserId: partnerAuthId,
+        role: "partner",
+        isActive: true,
+      });
+      const partnerView = await fetch(
+        `${api.baseUrl}/api/admin/partner-applications`,
+        { headers: { Authorization: `Bearer ${partnerAuthId}` } },
+      );
+      expect(partnerView.status).toBe(403);
+
+      const adminAuthId = "30000000-0000-4000-8000-000000000003";
+      await api.database.insert(appUsersTable).values({
+        authUserId: adminAuthId,
+        role: "admin",
+        isActive: true,
+      });
+      const adminView = await fetch(
+        `${api.baseUrl}/api/admin/partner-applications`,
+        { headers: { Authorization: `Bearer ${adminAuthId}` } },
+      );
+      expect(adminView.status).toBe(200);
+      expect(await adminView.json()).toEqual([
+        expect.objectContaining({
+          businessName: application.businessName,
+          contactName: application.contactName,
+          mobile: application.mobile,
+          email: application.email,
+          notificationStatus: "sent",
+        }),
+      ]);
+    } finally {
+      await api.close();
+    }
+  });
+
+  it("keeps a safely reviewable application when internal email fails", async () => {
+    const api = await createTestApi({
+      notificationProvider: {
+        sendEmail: async () => ({ ok: false, errorCode: "synthetic_failure" }),
+      },
+    });
+    try {
+      const response = await fetch(`${api.baseUrl}/api/partners`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...application,
+          submissionId: "40000000-0000-4000-8000-000000000004",
+        }),
+      });
+      expect(response.status).toBe(201);
+      expect(await response.json()).toMatchObject({ status: "pending" });
+      const stored = await api.database.select().from(partnersTable);
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).toMatchObject({
+        applicationNotificationStatus: "failed",
+        applicationNotificationErrorCode: "synthetic_failure",
+      });
     } finally {
       await api.close();
     }

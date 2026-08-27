@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Activity, ClipboardList, RefreshCw, Send, Users } from "lucide-react";
 import { Link } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  customFetch,
   getGetPartnerRecommendationsQueryKey,
   useCreateDispatchOffer,
   useGetAdminSummary,
@@ -20,10 +21,28 @@ import {
   StatusPill,
 } from "@/components/source-ui";
 
+type PartnerApplication = {
+  id: number;
+  businessName: string;
+  contactName: string;
+  trade: string;
+  mobile: string;
+  email: string;
+  suburbs: string[];
+  status: string;
+  submittedAt: string;
+  notificationStatus: string;
+};
+
 export default function AdminPage() {
   const summary = useGetAdminSummary();
   const jobs = useListJobs();
   const partners = useListPartners();
+  const applications = useQuery({
+    queryKey: ["admin", "partner-applications"],
+    queryFn: () =>
+      customFetch<PartnerApplication[]>("/api/admin/partner-applications"),
+  });
   const [filter, setFilter] = useState("all");
   const visible = useMemo(
     () =>
@@ -36,6 +55,7 @@ export default function AdminPage() {
     summary.refetch();
     jobs.refetch();
     partners.refetch();
+    applications.refetch();
   };
   const nav = (
     <div className="space-y-2">
@@ -99,6 +119,46 @@ export default function AdminPage() {
             />
           </div>
         )}
+        <section
+          className="mt-10"
+          aria-labelledby="pending-partner-applications"
+        >
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <SectionLabel>Partner intake</SectionLabel>
+              <h2
+                id="pending-partner-applications"
+                className="mt-1 text-2xl font-bold"
+              >
+                Pending applications
+              </h2>
+            </div>
+            <span className="font-mono-ui text-xs text-[hsl(var(--muted-foreground))]">
+              {applications.data?.length ?? 0} awaiting review
+            </span>
+          </div>
+          {applications.isLoading ? (
+            <Skeleton className="mt-4 h-28" />
+          ) : applications.isError ? (
+            <EmptyState
+              title="Partner applications unavailable"
+              detail="Refresh to try again. Applications remain stored in the database."
+            />
+          ) : applications.data?.length ? (
+            <div className="mt-4 space-y-3">
+              {applications.data.map((application) => (
+                <PartnerApplicationCard
+                  key={application.id}
+                  application={application}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 rounded-xl border border-dashed p-5 text-sm text-[hsl(var(--muted-foreground))]">
+              No partner applications are awaiting review.
+            </p>
+          )}
+        </section>
         <div className="mt-10 flex justify-end">
           <select
             className="field w-auto"
@@ -125,6 +185,41 @@ export default function AdminPage() {
         )}
       </main>
     </AppFrame>
+  );
+}
+
+function PartnerApplicationCard({
+  application,
+}: {
+  application: PartnerApplication;
+}) {
+  return (
+    <article className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold">{application.businessName}</h3>
+          <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+            {application.contactName} · {application.trade}
+          </p>
+        </div>
+        <StatusPill status={application.status} />
+      </div>
+      <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+        <a href={`tel:${application.mobile}`} className="font-semibold">
+          {application.mobile}
+        </a>
+        <a href={`mailto:${application.email}`} className="font-semibold">
+          {application.email}
+        </a>
+        <p>{application.suburbs.join(", ")}</p>
+        <p>
+          Submitted {new Date(application.submittedAt).toLocaleString("en-AU")}
+        </p>
+      </div>
+      <p className="mt-3 text-xs text-[hsl(var(--muted-foreground))]">
+        Internal notification: {application.notificationStatus}
+      </p>
+    </article>
   );
 }
 
