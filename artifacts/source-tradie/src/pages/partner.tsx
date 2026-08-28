@@ -32,6 +32,27 @@ const initialForm = {
   suburbs: "",
 };
 
+const partnerApplicationCategories = [
+  "Plumbing",
+  "Electrical",
+  "Heating & cooling",
+  "Handyman",
+  "Carpentry",
+  "Painting",
+  "Plastering",
+  "Tiling",
+  "Roofing & guttering",
+  "Locksmith",
+  "Appliance repair",
+  "Garage doors",
+  "Landscaping & gardening",
+  "Cleaning",
+  "Pest control",
+  "Concreting",
+  "Fencing",
+  "Other home service",
+] as const;
+
 export default function PartnerPage() {
   const submissionId = useRef(crypto.randomUUID());
   const funnelSessionId = useRef(crypto.randomUUID());
@@ -159,7 +180,8 @@ export default function PartnerPage() {
           <div className="content-wrap relative grid min-h-[650px] items-center gap-10 py-14 lg:grid-cols-[1.12fr_.88fr] lg:py-20">
             <div className="max-w-[760px] animate-rise">
               <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--card)/.75)] px-3 py-2 font-mono-ui text-[10px] font-medium uppercase tracking-[.15em] text-[hsl(var(--secondary))]">
-                <MapPin size={14} /> Melbourne North pilot
+                <MapPin size={14} /> Tradies &amp; home-service businesses —
+                Melbourne North
               </div>
               <h1 className="mt-7 max-w-[820px] text-[clamp(3.15rem,8vw,7.25rem)] font-bold uppercase leading-[.84] tracking-[-.075em]">
                 More local jobs.
@@ -179,7 +201,7 @@ export default function PartnerPage() {
                   Apply to join <ArrowRight size={17} />
                 </a>
                 <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                  Plumbing · Electrical · Heating &amp; Cooling
+                  Plumbing • Electrical • HVAC • Handyman • Landscaping + more
                 </p>
               </div>
             </div>
@@ -307,7 +329,7 @@ export default function PartnerPage() {
                   Applications are reviewed before activation
                 </TrustLine>
                 <TrustLine icon={<Wrench size={17} />}>
-                  For plumbing, electrical and heating/cooling businesses
+                  Tradies and home-service businesses are welcome to apply
                 </TrustLine>
                 <TrustLine icon={<MapPin size={17} />}>
                   Focused on Melbourne’s northern suburbs
@@ -346,12 +368,12 @@ export default function PartnerPage() {
                   autoComplete="organization"
                 />
                 <Field
-                  label="Trade"
+                  label="Primary trade or service"
                   id="trade"
                   value={form.trade}
                   onChange={(value) => update("trade", value)}
                   type="select"
-                  options={["Plumbing", "Electrical", "Heating & cooling"]}
+                  options={[...partnerApplicationCategories]}
                 />
                 <Field
                   label="Mobile"
@@ -384,6 +406,13 @@ export default function PartnerPage() {
               <p className="mt-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
                 Separate multiple suburbs with commas. We’ll confirm your full
                 service area during verification.
+              </p>
+              <p className="mt-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted)/.45)] p-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+                SourceTradie is accepting applications across multiple
+                home-service categories. Applications are reviewed
+                individually, and activation depends on verification, category
+                coverage and pilot availability. Applying does not guarantee
+                job offers or immediate activation.
               </p>
               {error && (
                 <p
@@ -426,7 +455,7 @@ export default function PartnerPage() {
                 Melbourne North
               </p>
               <p className="mt-2 text-2xl font-bold tracking-[-.045em]">
-                Plumbing · Electrical · Heating &amp; Cooling
+                Tradies &amp; home-service businesses
               </p>
             </div>
             <a

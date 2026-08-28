@@ -189,10 +189,10 @@ describe("public job status route", () => {
 describe("partner application intake", () => {
   const application = {
     submissionId: "10000000-0000-4000-8000-000000000001",
-    businessName: "Synthetic Northern Plumbing",
+    businessName: "Synthetic Northern Landscaping",
     contactName: "Test Applicant",
     abn: "11111111111",
-    trade: "Plumbing",
+    trade: "Landscaping & gardening",
     licence: "SYNTHETIC-ONLY",
     mobile: "0400000000",
     email: "partner-application@example.test",
@@ -269,6 +269,7 @@ describe("partner application intake", () => {
 
       const stored = await api.database.select().from(partnersTable);
       expect(stored[0]).toMatchObject({
+        trade: "Landscaping & gardening",
         acquisitionUtmSource: "facebook",
         acquisitionUtmMedium: "paid_social",
         acquisitionUtmCampaign: "partner_launch_melbourne_north",
@@ -343,7 +344,10 @@ describe("partner application intake", () => {
       });
       expect(messages[0].text).toContain("Contact name: Test Applicant");
       expect(messages[0].text).toContain(
-        "Business name: Synthetic Northern Plumbing",
+        "Business name: Synthetic Northern Landscaping",
+      );
+      expect(messages[0].text).toContain(
+        "Trade: Landscaping & gardening",
       );
       expect(messages[0].text).toContain("Service areas: Wollert, Epping");
       expect(messages[0].text).toMatch(/Submitted: .*Z/);
@@ -373,6 +377,7 @@ describe("partner application intake", () => {
       const stored = await api.database.select().from(partnersTable);
       expect(stored).toHaveLength(1);
       expect(stored[0]).toMatchObject({
+        trade: "Landscaping & gardening",
         status: "pending",
         availability: false,
         applicationNotificationStatus: "sent",
