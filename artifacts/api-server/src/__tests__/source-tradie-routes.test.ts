@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import {
   appUsersTable,
+  partnerFunnelEventsTable,
   partnerServiceAreasTable,
   partnersTable,
 } from "@workspace/db/schema";
@@ -36,6 +37,7 @@ async function createTestApi(
     "0007_partner_application_intake.sql",
     "0008_partner_application_acknowledgement.sql",
     "0009_partner_offer_sms.sql",
+    "0010_partner_acquisition_funnel.sql",
   ].map((file) =>
     path.resolve(import.meta.dirname, "../../../../lib/db/migrations", file),
   );
@@ -199,6 +201,99 @@ describe("partner application intake", () => {
     services: ["Repairs"],
     emergencyJobs: false,
   };
+
+  it("records privacy-safe UTM funnel events and attributes the application", async () => {
+    const messages: EmailMessage[] = [];
+    const api = await createTestApi({
+      notificationProvider: {
+        sendEmail: async (message) => {
+          messages.push(message);
+          return { ok: true, providerMessageId: `message-${messages.length}` };
+        },
+      },
+    });
+    const sessionId = "60000000-0000-4000-8000-000000000006";
+    const submissionId = "70000000-0000-4000-8000-000000000007";
+    const attribution = {
+      utmSource: "facebook",
+      utmMedium: "paid_social",
+      utmCampaign: "partner_launch_melbourne_north",
+    };
+    try {
+      for (const eventType of [
+        "partner_page_viewed",
+        "partner_application_started",
+      ]) {
+        const response = await fetch(
+          `${api.baseUrl}/api/partner-funnel/events`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId, eventType, attribution }),
+          },
+        );
+        expect(response.status).toBe(204);
+      }
+
+      const submitted = await fetch(`${api.baseUrl}/api/partners`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...application,
+          submissionId,
+          funnelSessionId: sessionId,
+          attribution,
+        }),
+      });
+      expect(submitted.status).toBe(201);
+      expect(messages).toHaveLength(2);
+
+      const events = await api.database.select().from(partnerFunnelEventsTable);
+      expect(events).toHaveLength(3);
+      expect(
+        events.map((event: { eventType: string }) => event.eventType).sort(),
+      ).toEqual([
+        "partner_application_started",
+        "partner_application_submitted",
+        "partner_page_viewed",
+      ]);
+      expect(
+        events.every(
+          (event: { utmSource: string | null }) =>
+            event.utmSource === "facebook",
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(events)).not.toMatch(
+        /Test Person|Test Trade|0400111222|test@example\.com/,
+      );
+
+      const stored = await api.database.select().from(partnersTable);
+      expect(stored[0]).toMatchObject({
+        acquisitionUtmSource: "facebook",
+        acquisitionUtmMedium: "paid_social",
+        acquisitionUtmCampaign: "partner_launch_melbourne_north",
+      });
+
+      const retry = await fetch(`${api.baseUrl}/api/partners`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...application,
+          submissionId,
+          funnelSessionId: sessionId,
+          attribution,
+        }),
+      });
+      expect(retry.status).toBe(200);
+      expect(
+        await api.database.select().from(partnerFunnelEventsTable),
+      ).toHaveLength(3);
+      expect(await api.database.select().from(partnersTable)).toHaveLength(1);
+      expect(messages).toHaveLength(2);
+    } finally {
+      await api.close();
+    }
+  });
 
   it("stores first, sends each email once, deduplicates retries, and restricts review to admins", async () => {
     const messages: EmailMessage[] = [];

@@ -54,9 +54,31 @@ const PricingPreviewBody = z
   })
   .strict();
 
+const CampaignValue = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[A-Za-z0-9._-]+$/);
+const PartnerAttributionBody = z
+  .object({
+    utmSource: CampaignValue.optional(),
+    utmMedium: CampaignValue.optional(),
+    utmCampaign: CampaignValue.optional(),
+  })
+  .strict();
 const PartnerApplicationBody = CreatePartnerBody.extend({
   submissionId: z.string().uuid(),
+  funnelSessionId: z.string().uuid().optional(),
+  attribution: PartnerAttributionBody.optional(),
 });
+const PartnerFunnelEventBody = z
+  .object({
+    sessionId: z.string().uuid(),
+    eventType: z.enum(["partner_page_viewed", "partner_application_started"]),
+    attribution: PartnerAttributionBody.optional(),
+  })
+  .strict();
 
 const JobIntakeCorrectionBody = z.object({
   description: z.string().trim().min(4),
@@ -439,6 +461,15 @@ export function createSourceTradieRouter(
       submittedAt: result.application.submittedAt,
       duplicate: result.duplicate,
     });
+  });
+
+  router.post("/partner-funnel/events", async (req, res) => {
+    const parsed = PartnerFunnelEventBody.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid funnel event." });
+    }
+    await repository.recordPartnerFunnelEvent(parsed.data).catch(() => false);
+    return res.status(204).end();
   });
 
   router.get(

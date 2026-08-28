@@ -73,6 +73,10 @@ function buildRepository(
       import.meta.dirname,
       "../../../../lib/db/migrations/0009_partner_offer_sms.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0010_partner_acquisition_funnel.sql",
+    ),
   ];
 
   return Promise.all(

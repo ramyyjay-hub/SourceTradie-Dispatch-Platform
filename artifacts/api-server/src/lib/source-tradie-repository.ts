@@ -10,6 +10,7 @@ import {
   jobStatusEnum,
   jobStatusHistoryTable,
   notificationsTable,
+  partnerFunnelEventsTable,
   partnerServiceAreasTable,
   partnersTable,
   partnerServicesTable,
@@ -201,6 +202,16 @@ export type PrincipalRecord = {
 
 export type JobStatus = (typeof jobStatusEnum.enumValues)[number];
 export type DispatchState = (typeof dispatchStateEnum.enumValues)[number];
+export type PartnerFunnelEventType =
+  | "partner_page_viewed"
+  | "partner_application_started"
+  | "partner_application_submitted";
+
+export type PartnerAttribution = {
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+};
 
 const jobStatusTransitions: Record<JobStatus, JobStatus[]> = {
   new: ["reviewing", "cancelled"],
@@ -1575,6 +1586,8 @@ export class SourceTradieRepository {
     radiusKm: number;
     services?: string[];
     emergencyJobs?: boolean;
+    funnelSessionId?: string;
+    attribution?: PartnerAttribution;
   }): Promise<{ application: PartnerApplicationApi; duplicate: boolean }> {
     const inserted = await this.database.transaction(async (tx) => {
       const now = new Date();
@@ -1593,6 +1606,9 @@ export class SourceTradieRepository {
           emergencyJobs: input.emergencyJobs ?? false,
           availability: false,
           status: "pending",
+          acquisitionUtmSource: input.attribution?.utmSource || null,
+          acquisitionUtmMedium: input.attribution?.utmMedium || null,
+          acquisitionUtmCampaign: input.attribution?.utmCampaign || null,
           applicationNotificationStatus: "pending",
           createdAt: now,
           updatedAt: now,
@@ -1635,6 +1651,15 @@ export class SourceTradieRepository {
           .limit(1)
       )[0];
     if (!stored) throw new Error("partner_application_idempotency_conflict");
+
+    if (input.funnelSessionId) {
+      await this.recordPartnerFunnelEvent({
+        sessionId: input.funnelSessionId,
+        eventType: "partner_application_submitted",
+        applicationSubmissionId: stored.applicationSubmissionId ?? undefined,
+        attribution: input.attribution,
+      }).catch(() => false);
+    }
 
     if (inserted) {
       const internalResult = await this.sendTransactionalEmail({
@@ -1708,6 +1733,28 @@ export class SourceTradieRepository {
     );
     if (!application) throw new Error("partner_application_not_found");
     return { application, duplicate: !inserted };
+  }
+
+  async recordPartnerFunnelEvent(input: {
+    sessionId: string;
+    eventType: PartnerFunnelEventType;
+    applicationSubmissionId?: string;
+    attribution?: PartnerAttribution;
+  }): Promise<boolean> {
+    const inserted = await this.database
+      .insert(partnerFunnelEventsTable)
+      .values({
+        sessionId: input.sessionId,
+        eventType: input.eventType,
+        applicationSubmissionId: input.applicationSubmissionId ?? null,
+        utmSource: input.attribution?.utmSource || null,
+        utmMedium: input.attribution?.utmMedium || null,
+        utmCampaign: input.attribution?.utmCampaign || null,
+        createdAt: new Date(),
+      })
+      .onConflictDoNothing()
+      .returning({ id: partnerFunnelEventsTable.id });
+    return Boolean(inserted[0]);
   }
 
   async updatePartnerAvailability(

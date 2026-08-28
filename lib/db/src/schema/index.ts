@@ -214,6 +214,9 @@ export const partnersTable = pgTable(
     jobOfferSmsConsentAt: timestamp("job_offer_sms_consent_at", {
       withTimezone: true,
     }),
+    acquisitionUtmSource: text("acquisition_utm_source"),
+    acquisitionUtmMedium: text("acquisition_utm_medium"),
+    acquisitionUtmCampaign: text("acquisition_utm_campaign"),
     email: text("email").notNull(),
     radiusKm: integer("radius_km").notNull().default(15),
     emergencyJobs: boolean("emergency_jobs").notNull().default(false),
@@ -263,6 +266,30 @@ export const partnersTable = pgTable(
       .where(sql`application_submission_id IS NOT NULL`),
     index("partners_status_idx").on(table.status),
     index("partners_availability_idx").on(table.availability),
+  ],
+);
+
+export const partnerFunnelEventsTable = pgTable(
+  "partner_funnel_events",
+  {
+    id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+    sessionId: uuid("session_id").notNull(),
+    eventType: text("event_type").notNull(),
+    applicationSubmissionId: uuid("application_submission_id"),
+    utmSource: text("utm_source"),
+    utmMedium: text("utm_medium"),
+    utmCampaign: text("utm_campaign"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("partner_funnel_events_session_event_uidx").on(
+      table.sessionId,
+      table.eventType,
+    ),
+    index("partner_funnel_events_created_at_idx").on(table.createdAt),
+    index("partner_funnel_events_campaign_idx").on(table.utmCampaign),
   ],
 );
 
