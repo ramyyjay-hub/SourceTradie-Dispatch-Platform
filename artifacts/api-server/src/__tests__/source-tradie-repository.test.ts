@@ -11,6 +11,7 @@ import {
   jobsTable,
   jobStatusHistoryTable,
   notificationsTable,
+  partnerFunnelEventsTable,
   partnersTable,
 } from "@workspace/db/schema";
 import {
@@ -1072,6 +1073,174 @@ describe("source tradie repository", () => {
     });
     expect(recommendations?.[1]?.disqualifications).toContain("TRADE_MISMATCH");
     expect(await db.select().from(dispatchOffersTable)).toHaveLength(0);
+    await client.close();
+  });
+
+  it("exposes acquisition UTM attribution on pending partner applications", async () => {
+    const { repository, client } = await buildRepository();
+
+    await repository.submitPartnerApplication({
+      submissionId: "10000000-0000-4000-8000-000000000101",
+      businessName: "Attributed Plumbing",
+      contactName: "Attributed Applicant",
+      trade: "Plumbing",
+      mobile: "0400000101",
+      email: "attributed@example.com",
+      suburbs: ["Brunswick"],
+      radiusKm: 15,
+      funnelSessionId: "20000000-0000-4000-8000-000000000201",
+      attribution: {
+        utmSource: "facebook",
+        utmMedium: "paid_social",
+        utmCampaign: "partner_launch_melbourne_north",
+      },
+    });
+    await repository.submitPartnerApplication({
+      submissionId: "10000000-0000-4000-8000-000000000102",
+      businessName: "Direct Electrical",
+      contactName: "Direct Applicant",
+      trade: "Electrical",
+      mobile: "0400000102",
+      email: "direct@example.com",
+      suburbs: ["Coburg"],
+      radiusKm: 15,
+    });
+
+    const applications = await repository.listPendingPartnerApplications();
+    const attributed = applications.find(
+      (application) => application.businessName === "Attributed Plumbing",
+    );
+    const direct = applications.find(
+      (application) => application.businessName === "Direct Electrical",
+    );
+
+    expect(attributed).toMatchObject({
+      acquisitionUtmSource: "facebook",
+      acquisitionUtmMedium: "paid_social",
+      acquisitionUtmCampaign: "partner_launch_melbourne_north",
+    });
+    expect(direct).toMatchObject({
+      acquisitionUtmSource: null,
+      acquisitionUtmMedium: null,
+      acquisitionUtmCampaign: null,
+    });
+
+    await client.close();
+  });
+
+  it("aggregates the partner acquisition funnel by UTM source, medium, and campaign", async () => {
+    const { repository, db, client } = await buildRepository();
+
+    const campaignA = {
+      utmSource: "facebook",
+      utmMedium: "paid_social",
+      utmCampaign: "partner_launch_melbourne_north",
+    };
+    const campaignB = {
+      utmSource: "google",
+      utmMedium: "cpc",
+      utmCampaign: "partner_search_melbourne",
+    };
+
+    await db.insert(partnerFunnelEventsTable).values([
+      // Campaign A: 3 views, 2 starts, 1 submit.
+      {
+        sessionId: "30000000-0000-4000-8000-000000000001",
+        eventType: "partner_page_viewed",
+        ...campaignA,
+      },
+      {
+        sessionId: "30000000-0000-4000-8000-000000000002",
+        eventType: "partner_page_viewed",
+        ...campaignA,
+      },
+      {
+        sessionId: "30000000-0000-4000-8000-000000000003",
+        eventType: "partner_page_viewed",
+        ...campaignA,
+      },
+      {
+        sessionId: "30000000-0000-4000-8000-000000000001",
+        eventType: "partner_application_started",
+        ...campaignA,
+      },
+      {
+        sessionId: "30000000-0000-4000-8000-000000000002",
+        eventType: "partner_application_started",
+        ...campaignA,
+      },
+      {
+        sessionId: "30000000-0000-4000-8000-000000000001",
+        eventType: "partner_application_submitted",
+        ...campaignA,
+      },
+      // Campaign B: 1 view only, no starts or submits.
+      {
+        sessionId: "30000000-0000-4000-8000-000000000004",
+        eventType: "partner_page_viewed",
+        ...campaignB,
+      },
+      // Unattributed (direct) traffic: 1 view, 1 start, 0 submits.
+      {
+        sessionId: "30000000-0000-4000-8000-000000000005",
+        eventType: "partner_page_viewed",
+      },
+      {
+        sessionId: "30000000-0000-4000-8000-000000000005",
+        eventType: "partner_application_started",
+      },
+    ]);
+
+    const summary = await repository.getPartnerAcquisitionSummary();
+
+    expect(summary.totals).toEqual({
+      views: 5,
+      starts: 3,
+      submits: 1,
+      viewToStartRate: 3 / 5,
+      startToSubmitRate: 1 / 3,
+      viewToSubmitRate: 1 / 5,
+    });
+
+    expect(summary.breakdown).toEqual(
+      expect.arrayContaining([
+        {
+          utmSource: "facebook",
+          utmMedium: "paid_social",
+          utmCampaign: "partner_launch_melbourne_north",
+          views: 3,
+          starts: 2,
+          submits: 1,
+          viewToStartRate: 2 / 3,
+          startToSubmitRate: 1 / 2,
+          viewToSubmitRate: 1 / 3,
+        },
+        {
+          utmSource: "google",
+          utmMedium: "cpc",
+          utmCampaign: "partner_search_melbourne",
+          views: 1,
+          starts: 0,
+          submits: 0,
+          viewToStartRate: 0,
+          startToSubmitRate: null,
+          viewToSubmitRate: 0,
+        },
+        {
+          utmSource: null,
+          utmMedium: null,
+          utmCampaign: null,
+          views: 1,
+          starts: 1,
+          submits: 0,
+          viewToStartRate: 1,
+          startToSubmitRate: 0,
+          viewToSubmitRate: 0,
+        },
+      ]),
+    );
+    expect(summary.breakdown).toHaveLength(3);
+
     await client.close();
   });
 });

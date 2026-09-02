@@ -166,6 +166,29 @@ export type PartnerApplicationApi = PartnerApi & {
   submittedAt: string;
   notificationStatus: string;
   acknowledgementStatus: string;
+  acquisitionUtmSource: string | null;
+  acquisitionUtmMedium: string | null;
+  acquisitionUtmCampaign: string | null;
+};
+
+export type PartnerAcquisitionFunnelCountsApi = {
+  views: number;
+  starts: number;
+  submits: number;
+  viewToStartRate: number | null;
+  startToSubmitRate: number | null;
+  viewToSubmitRate: number | null;
+};
+
+export type PartnerAcquisitionBreakdownRowApi = PartnerAcquisitionFunnelCountsApi & {
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+};
+
+export type PartnerAcquisitionSummaryApi = {
+  totals: PartnerAcquisitionFunnelCountsApi;
+  breakdown: PartnerAcquisitionBreakdownRowApi[];
 };
 
 export type DispatchApi = {
@@ -1150,7 +1173,91 @@ export class SourceTradieRepository {
       submittedAt: partner.createdAt.toISOString(),
       notificationStatus: partner.applicationNotificationStatus,
       acknowledgementStatus: partner.applicationAcknowledgementStatus,
+      acquisitionUtmSource: partner.acquisitionUtmSource ?? null,
+      acquisitionUtmMedium: partner.acquisitionUtmMedium ?? null,
+      acquisitionUtmCampaign: partner.acquisitionUtmCampaign ?? null,
     }));
+  }
+
+  async getPartnerAcquisitionSummary(): Promise<PartnerAcquisitionSummaryApi> {
+    const rows = await this.database
+      .select({
+        utmSource: partnerFunnelEventsTable.utmSource,
+        utmMedium: partnerFunnelEventsTable.utmMedium,
+        utmCampaign: partnerFunnelEventsTable.utmCampaign,
+        eventType: partnerFunnelEventsTable.eventType,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(partnerFunnelEventsTable)
+      .groupBy(
+        partnerFunnelEventsTable.utmSource,
+        partnerFunnelEventsTable.utmMedium,
+        partnerFunnelEventsTable.utmCampaign,
+        partnerFunnelEventsTable.eventType,
+      );
+
+    type RawCounts = {
+      utmSource: string | null;
+      utmMedium: string | null;
+      utmCampaign: string | null;
+      views: number;
+      starts: number;
+      submits: number;
+    };
+    const groups = new Map<string, RawCounts>();
+    const rawTotals = { views: 0, starts: 0, submits: 0 };
+
+    for (const row of rows) {
+      const key = JSON.stringify([row.utmSource, row.utmMedium, row.utmCampaign]);
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          utmSource: row.utmSource,
+          utmMedium: row.utmMedium,
+          utmCampaign: row.utmCampaign,
+          views: 0,
+          starts: 0,
+          submits: 0,
+        };
+        groups.set(key, group);
+      }
+      const count = Number(row.count);
+      if (row.eventType === "partner_page_viewed") {
+        group.views += count;
+        rawTotals.views += count;
+      } else if (row.eventType === "partner_application_started") {
+        group.starts += count;
+        rawTotals.starts += count;
+      } else if (row.eventType === "partner_application_submitted") {
+        group.submits += count;
+        rawTotals.submits += count;
+      }
+    }
+
+    const rate = (numerator: number, denominator: number): number | null =>
+      denominator > 0 ? numerator / denominator : null;
+    const withRates = (
+      counts: Omit<PartnerAcquisitionFunnelCountsApi, "viewToStartRate" | "startToSubmitRate" | "viewToSubmitRate">,
+    ): PartnerAcquisitionFunnelCountsApi => ({
+      ...counts,
+      viewToStartRate: rate(counts.starts, counts.views),
+      startToSubmitRate: rate(counts.submits, counts.starts),
+      viewToSubmitRate: rate(counts.submits, counts.views),
+    });
+
+    const breakdown = Array.from(groups.values())
+      .map((group) => ({
+        utmSource: group.utmSource,
+        utmMedium: group.utmMedium,
+        utmCampaign: group.utmCampaign,
+        ...withRates(group),
+      }))
+      .sort((a, b) => b.views - a.views);
+
+    return {
+      totals: withRates(rawTotals),
+      breakdown,
+    };
   }
 
   async listJobsAwaitingDispatch(): Promise<JobApi[]> {

@@ -33,6 +33,29 @@ type PartnerApplication = {
   submittedAt: string;
   notificationStatus: string;
   acknowledgementStatus: string;
+  acquisitionUtmSource: string | null;
+  acquisitionUtmMedium: string | null;
+  acquisitionUtmCampaign: string | null;
+};
+
+type PartnerAcquisitionFunnelCounts = {
+  views: number;
+  starts: number;
+  submits: number;
+  viewToStartRate: number | null;
+  startToSubmitRate: number | null;
+  viewToSubmitRate: number | null;
+};
+
+type PartnerAcquisitionBreakdownRow = PartnerAcquisitionFunnelCounts & {
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+};
+
+type PartnerAcquisitionSummary = {
+  totals: PartnerAcquisitionFunnelCounts;
+  breakdown: PartnerAcquisitionBreakdownRow[];
 };
 
 export default function AdminPage() {
@@ -43,6 +66,13 @@ export default function AdminPage() {
     queryKey: ["admin", "partner-applications"],
     queryFn: () =>
       customFetch<PartnerApplication[]>("/api/admin/partner-applications"),
+  });
+  const acquisitionSummary = useQuery({
+    queryKey: ["admin", "partner-acquisition-summary"],
+    queryFn: () =>
+      customFetch<PartnerAcquisitionSummary>(
+        "/api/admin/partner-acquisition-summary",
+      ),
   });
   const [filter, setFilter] = useState("all");
   const visible = useMemo(
@@ -57,6 +87,7 @@ export default function AdminPage() {
     jobs.refetch();
     partners.refetch();
     applications.refetch();
+    acquisitionSummary.refetch();
   };
   const nav = (
     <div className="space-y-2">
@@ -160,6 +191,30 @@ export default function AdminPage() {
             </p>
           )}
         </section>
+        <section
+          className="mt-10"
+          aria-labelledby="partner-acquisition-summary"
+        >
+          <SectionLabel>Partner intake</SectionLabel>
+          <h2
+            id="partner-acquisition-summary"
+            className="mt-1 text-2xl font-bold"
+          >
+            Acquisition funnel
+          </h2>
+          {acquisitionSummary.isLoading ? (
+            <Skeleton className="mt-4 h-28" />
+          ) : acquisitionSummary.isError ? (
+            <EmptyState
+              title="Acquisition summary unavailable"
+              detail="Refresh to try again. Funnel events remain stored in the database."
+            />
+          ) : (
+            <PartnerAcquisitionSummaryPanel
+              summary={acquisitionSummary.data}
+            />
+          )}
+        </section>
         <div className="mt-10 flex justify-end">
           <select
             className="field w-auto"
@@ -221,7 +276,96 @@ function PartnerApplicationCard({
         Internal notification: {application.notificationStatus} · Applicant
         acknowledgement: {application.acknowledgementStatus}
       </p>
+      <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+        Source: {formatAcquisition(application)}
+      </p>
     </article>
+  );
+}
+
+function formatAcquisition(attribution: {
+  acquisitionUtmSource: string | null;
+  acquisitionUtmMedium: string | null;
+  acquisitionUtmCampaign: string | null;
+}): string {
+  const parts = [
+    attribution.acquisitionUtmSource,
+    attribution.acquisitionUtmMedium,
+    attribution.acquisitionUtmCampaign,
+  ].filter((value): value is string => Boolean(value));
+  return parts.length ? parts.join(" / ") : "Direct (no campaign)";
+}
+
+function formatRate(rate: number | null): string {
+  return rate === null ? "—" : `${(rate * 100).toFixed(1)}%`;
+}
+
+function PartnerAcquisitionSummaryPanel({
+  summary,
+}: {
+  summary: PartnerAcquisitionSummary | undefined;
+}) {
+  if (!summary) return null;
+  const { totals, breakdown } = summary;
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatCard label="Page views" value={totals.views} />
+        <StatCard label="Applications started" value={totals.starts} />
+        <StatCard label="Applications submitted" value={totals.submits} />
+        <StatCard label="View → start" value={formatRate(totals.viewToStartRate)} />
+        <StatCard
+          label="Start → submit"
+          value={formatRate(totals.startToSubmitRate)}
+        />
+        <StatCard
+          label="View → submit"
+          value={formatRate(totals.viewToSubmitRate)}
+        />
+      </div>
+      {breakdown.length ? (
+        <div className="overflow-x-auto rounded-2xl border border-[hsl(var(--border))]">
+          <table className="w-full text-left text-sm" data-testid="table-partner-acquisition-breakdown">
+            <thead className="bg-[hsl(var(--muted)/.55)] text-xs uppercase tracking-[.08em] text-[hsl(var(--muted-foreground))]">
+              <tr>
+                <th className="px-4 py-3 font-semibold">Source</th>
+                <th className="px-4 py-3 font-semibold">Medium</th>
+                <th className="px-4 py-3 font-semibold">Campaign</th>
+                <th className="px-4 py-3 font-semibold">Views</th>
+                <th className="px-4 py-3 font-semibold">Starts</th>
+                <th className="px-4 py-3 font-semibold">Submits</th>
+                <th className="px-4 py-3 font-semibold">View → start</th>
+                <th className="px-4 py-3 font-semibold">Start → submit</th>
+                <th className="px-4 py-3 font-semibold">View → submit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {breakdown.map((row, index) => (
+                <tr
+                  key={`${row.utmSource ?? ""}-${row.utmMedium ?? ""}-${row.utmCampaign ?? ""}`}
+                  className="border-t border-[hsl(var(--border))]"
+                  data-testid={`row-acquisition-breakdown-${index}`}
+                >
+                  <td className="px-4 py-3">{row.utmSource ?? "—"}</td>
+                  <td className="px-4 py-3">{row.utmMedium ?? "—"}</td>
+                  <td className="px-4 py-3">{row.utmCampaign ?? "—"}</td>
+                  <td className="px-4 py-3">{row.views}</td>
+                  <td className="px-4 py-3">{row.starts}</td>
+                  <td className="px-4 py-3">{row.submits}</td>
+                  <td className="px-4 py-3">{formatRate(row.viewToStartRate)}</td>
+                  <td className="px-4 py-3">{formatRate(row.startToSubmitRate)}</td>
+                  <td className="px-4 py-3">{formatRate(row.viewToSubmitRate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="rounded-xl border border-dashed p-5 text-sm text-[hsl(var(--muted-foreground))]">
+          No partner funnel activity has been recorded yet.
+        </p>
+      )}
+    </div>
   );
 }
 

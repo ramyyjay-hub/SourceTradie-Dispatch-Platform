@@ -275,6 +275,26 @@ describe("partner application intake", () => {
         acquisitionUtmCampaign: "partner_launch_melbourne_north",
       });
 
+      const adminAuthId = "60000000-0000-4000-8000-000000000009";
+      await api.database.insert(appUsersTable).values({
+        authUserId: adminAuthId,
+        role: "admin",
+        isActive: true,
+      });
+      const adminView = await fetch(
+        `${api.baseUrl}/api/admin/partner-applications`,
+        { headers: { Authorization: `Bearer ${adminAuthId}` } },
+      );
+      expect(adminView.status).toBe(200);
+      expect(await adminView.json()).toEqual([
+        expect.objectContaining({
+          businessName: application.businessName,
+          acquisitionUtmSource: "facebook",
+          acquisitionUtmMedium: "paid_social",
+          acquisitionUtmCampaign: "partner_launch_melbourne_north",
+        }),
+      ]);
+
       const retry = await fetch(`${api.baseUrl}/api/partners`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -291,6 +311,106 @@ describe("partner application intake", () => {
       ).toHaveLength(3);
       expect(await api.database.select().from(partnersTable)).toHaveLength(1);
       expect(messages).toHaveLength(2);
+    } finally {
+      await api.close();
+    }
+  });
+
+  it("serves an admin-only partner acquisition funnel summary from recorded funnel events", async () => {
+    const api = await createTestApi();
+    try {
+      const sessionA = "60000000-0000-4000-8000-000000000010";
+      const sessionB = "60000000-0000-4000-8000-000000000011";
+      const attribution = {
+        utmSource: "facebook",
+        utmMedium: "paid_social",
+        utmCampaign: "partner_launch_melbourne_north",
+      };
+
+      for (const eventType of [
+        "partner_page_viewed",
+        "partner_application_started",
+      ]) {
+        for (const sessionId of [sessionA, sessionB]) {
+          const response = await fetch(
+            `${api.baseUrl}/api/partner-funnel/events`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionId, eventType, attribution }),
+            },
+          );
+          expect(response.status).toBe(204);
+        }
+      }
+      const viewOnly = await fetch(`${api.baseUrl}/api/partner-funnel/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "60000000-0000-4000-8000-000000000012",
+          eventType: "partner_page_viewed",
+        }),
+      });
+      expect(viewOnly.status).toBe(204);
+
+      const unauthenticated = await fetch(
+        `${api.baseUrl}/api/admin/partner-acquisition-summary`,
+      );
+      expect(unauthenticated.status).toBe(401);
+
+      const partnerAuthId = "60000000-0000-4000-8000-000000000013";
+      await api.database.insert(appUsersTable).values({
+        authUserId: partnerAuthId,
+        role: "partner",
+        isActive: true,
+      });
+      const partnerView = await fetch(
+        `${api.baseUrl}/api/admin/partner-acquisition-summary`,
+        { headers: { Authorization: `Bearer ${partnerAuthId}` } },
+      );
+      expect(partnerView.status).toBe(403);
+
+      const adminAuthId = "60000000-0000-4000-8000-000000000014";
+      await api.database.insert(appUsersTable).values({
+        authUserId: adminAuthId,
+        role: "admin",
+        isActive: true,
+      });
+      const adminView = await fetch(
+        `${api.baseUrl}/api/admin/partner-acquisition-summary`,
+        { headers: { Authorization: `Bearer ${adminAuthId}` } },
+      );
+      expect(adminView.status).toBe(200);
+      const summary = (await adminView.json()) as {
+        totals: Record<string, unknown>;
+        breakdown: Record<string, unknown>[];
+      };
+      expect(summary.totals).toEqual({
+        views: 3,
+        starts: 2,
+        submits: 0,
+        viewToStartRate: 2 / 3,
+        startToSubmitRate: 0,
+        viewToSubmitRate: 0,
+      });
+      expect(summary.breakdown).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            utmSource: "facebook",
+            utmMedium: "paid_social",
+            utmCampaign: "partner_launch_melbourne_north",
+            views: 2,
+            starts: 2,
+          }),
+          expect.objectContaining({
+            utmSource: null,
+            utmMedium: null,
+            utmCampaign: null,
+            views: 1,
+            starts: 0,
+          }),
+        ]),
+      );
     } finally {
       await api.close();
     }
@@ -428,6 +548,9 @@ describe("partner application intake", () => {
           email: application.email,
           notificationStatus: "sent",
           acknowledgementStatus: "sent",
+          acquisitionUtmSource: null,
+          acquisitionUtmMedium: null,
+          acquisitionUtmCampaign: null,
         }),
       ]);
     } finally {

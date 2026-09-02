@@ -350,6 +350,15 @@ export function createSourceTradieRouter(
     },
   );
 
+  router.get(
+    "/admin/partner-acquisition-summary",
+    authRequired,
+    requireAdmin,
+    async (_req, res) => {
+      res.json(await repository.getPartnerAcquisitionSummary());
+    },
+  );
+
   router.post(
     "/admin/dispatch-offers",
     authRequired,
