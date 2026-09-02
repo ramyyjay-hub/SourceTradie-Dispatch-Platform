@@ -478,7 +478,7 @@ describe("partner application intake", () => {
         text: [
           "Hi Test,",
           "",
-          "Thanks for applying to join the SourceTradie Melbourne North partner network.",
+          "Thanks for applying to join the SourceTradie partner network across Melbourne.",
           "",
           "We've received your application and our Partner Operations team will review your details.",
           "",

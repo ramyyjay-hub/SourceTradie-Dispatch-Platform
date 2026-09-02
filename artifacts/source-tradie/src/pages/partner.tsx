@@ -68,10 +68,10 @@ export default function PartnerPage() {
       'meta[name="description"]',
     );
     const previousDescription = description?.content;
-    document.title = "Join SourceTradie | Melbourne North Tradie Partner Pilot";
+    document.title = "Join SourceTradie | Melbourne Tradie Partner Pilot";
     if (description) {
       description.content =
-        "Apply to join the SourceTradie Melbourne North partner network. No subscription or lead fees during the pilot.";
+        "Apply to join the SourceTradie partner network across Melbourne. No subscription or lead fees during the pilot.";
     }
     void recordPartnerFunnelEvent({
       sessionId: funnelSessionId.current,
@@ -165,7 +165,7 @@ export default function PartnerPage() {
           <Brand />
           <div className="flex items-center gap-2">
             <span className="hidden font-mono-ui text-[10px] uppercase tracking-[.14em] text-[hsl(var(--muted-foreground))] sm:block">
-              Melbourne North
+              Across Melbourne
             </span>
             <a href="#apply" className="btn-accent min-h-[42px] px-4 text-sm">
               Apply to join <ArrowDown size={15} />
@@ -181,7 +181,7 @@ export default function PartnerPage() {
             <div className="max-w-[760px] animate-rise">
               <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--card)/.75)] px-3 py-2 font-mono-ui text-[10px] font-medium uppercase tracking-[.15em] text-[hsl(var(--secondary))]">
                 <MapPin size={14} /> Tradies &amp; home-service businesses —
-                Melbourne North
+                Across Melbourne
               </div>
               <h1 className="mt-7 max-w-[820px] text-[clamp(3.15rem,8vw,7.25rem)] font-bold uppercase leading-[.84] tracking-[-.075em]">
                 More local jobs.
@@ -190,7 +190,7 @@ export default function PartnerPage() {
                 </span>
               </h1>
               <p className="mt-8 max-w-xl text-xl font-semibold leading-7 tracking-[-.02em] sm:text-2xl sm:leading-8">
-                Join the SourceTradie Melbourne North partner network.
+                Join the SourceTradie partner network across Melbourne.
               </p>
               <p className="mt-4 max-w-xl text-base leading-7 text-[hsl(var(--muted-foreground))] sm:text-lg">
                 See suitable local jobs before deciding whether you want them.
@@ -332,7 +332,7 @@ export default function PartnerPage() {
                   Tradies and home-service businesses are welcome to apply
                 </TrustLine>
                 <TrustLine icon={<MapPin size={17} />}>
-                  Focused on Melbourne’s northern suburbs
+                  Focused on local tradies across Melbourne
                 </TrustLine>
               </div>
             </div>
@@ -452,7 +452,7 @@ export default function PartnerPage() {
           <div className="content-wrap flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-mono-ui text-[10px] uppercase tracking-[.16em] text-[hsl(var(--accent))]">
-                Melbourne North
+                Across Melbourne
               </p>
               <p className="mt-2 text-2xl font-bold tracking-[-.045em]">
                 Tradies &amp; home-service businesses
