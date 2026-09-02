@@ -39,7 +39,7 @@ export default function Home() {
         </section>
         <section className="content-wrap flex flex-col items-start justify-between gap-8 py-20 md:flex-row md:items-end md:py-24"><div><p className="font-mono-ui text-[10px] uppercase tracking-[.16em] text-[hsl(var(--secondary))]">Ready when you are</p><h2 className="mt-3 text-4xl font-bold tracking-[-.06em] md:text-6xl">Start with the thing<br /><span className="font-display font-normal italic">that’s annoying you.</span></h2></div><Link href="/request" className="btn-main" data-testid="link-final-request">Source a Tradie <ArrowRight size={17} /></Link></section>
       </main>
-      <footer className="border-t border-[hsl(var(--border))] py-6"><div className="content-wrap flex flex-col gap-2 text-xs text-[hsl(var(--muted-foreground))] sm:flex-row sm:items-center sm:justify-between"><span>SourceTradie — Melbourne’s customer-first dispatch.</span></div></footer>
+      <footer className="border-t border-[hsl(var(--border))] py-6"><div className="content-wrap flex flex-col gap-2 text-xs text-[hsl(var(--muted-foreground))] sm:flex-row sm:items-center sm:justify-between"><span>SourceTradie — Melbourne’s customer-first dispatch.</span><Link href="/for-tradies" className="hover:underline hover:text-[hsl(var(--foreground))]" data-testid="link-footer-for-tradies">More for tradies</Link></div></footer>
     </div>
   );
 }
