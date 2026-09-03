@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { Link } from "wouter";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent, MouseEvent, ReactNode } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { useMutation } from "@tanstack/react-query";
 import { Brand, SectionLabel } from "@/components/source-ui";
@@ -23,6 +23,17 @@ import {
   readPartnerAttribution,
   recordPartnerFunnelEvent,
 } from "@/lib/partner-funnel";
+
+// Client-side routing intercepts the browser's native hash-anchor scroll, so
+// every "#apply" CTA needs to trigger the scroll itself. The href is kept so
+// keyboard/screen-reader users and no-JS fallback still get a working link;
+// this only takes over to make the scroll smooth and clear the sticky header.
+function scrollToApply(event: MouseEvent<HTMLAnchorElement>) {
+  const target = document.getElementById("apply");
+  if (!target) return;
+  event.preventDefault();
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 const initialForm = {
   contactName: "",
@@ -170,6 +181,7 @@ export default function PartnerPage() {
             </span>
             <a
               href="#apply"
+              onClick={scrollToApply}
               className="btn-accent min-h-[40px] px-4 text-sm sm:min-h-[42px]"
               data-testid="link-header-apply"
             >
@@ -207,6 +219,7 @@ export default function PartnerPage() {
               <div className="mt-5 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center">
                 <a
                   href="#apply"
+                  onClick={scrollToApply}
                   className="btn-accent min-h-[50px] px-6 sm:min-h-[54px]"
                   data-testid="link-hero-apply"
                 >
@@ -390,7 +403,7 @@ export default function PartnerPage() {
         </section>
 
         {/* Application */}
-        <section id="apply" className="scroll-mt-6 py-14 sm:py-24">
+        <section id="apply" className="scroll-mt-24 py-14 sm:py-24">
           <div className="content-wrap grid max-w-[1060px] gap-10 lg:grid-cols-[.75fr_1.25fr] lg:items-start">
             <div className="lg:sticky lg:top-24">
               <SectionLabel>Partner application</SectionLabel>
@@ -575,6 +588,7 @@ export default function PartnerPage() {
             </div>
             <a
               href="#apply"
+              onClick={scrollToApply}
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[hsl(var(--accent))] px-5 font-bold text-[hsl(var(--accent-foreground))]"
               data-testid="link-footer-apply"
             >
@@ -600,6 +614,7 @@ export default function PartnerPage() {
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[hsl(var(--border))] bg-[hsl(var(--background)/.97)] p-3 backdrop-blur md:hidden">
         <a
           href="#apply"
+          onClick={scrollToApply}
           className="btn-accent min-h-[50px] w-full"
           data-testid="link-sticky-apply"
         >
@@ -616,7 +631,12 @@ function MidCta({ text }: { text: string }) {
       <p className="text-sm font-semibold text-[hsl(var(--muted-foreground))] sm:text-base">
         {text}
       </p>
-      <a href="#apply" className="btn-main" data-testid="link-mid-apply">
+      <a
+        href="#apply"
+        onClick={scrollToApply}
+        className="btn-main"
+        data-testid="link-mid-apply"
+      >
         Apply to join <ArrowRight size={16} />
       </a>
     </div>
