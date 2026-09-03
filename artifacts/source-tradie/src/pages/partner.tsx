@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowDown,
   ArrowRight,
   Camera,
   Check,
@@ -11,12 +10,14 @@ import {
   MapPin,
   ShieldCheck,
   Wrench,
+  X,
 } from "lucide-react";
 import { Link } from "wouter";
 import type { FormEvent, ReactNode } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { useMutation } from "@tanstack/react-query";
 import { Brand, SectionLabel } from "@/components/source-ui";
+import { FaqSection } from "@/components/seo-content";
 import {
   hasPartnerAttribution,
   readPartnerAttribution,
@@ -159,45 +160,56 @@ export default function PartnerPage() {
   if (submitted) return <SuccessScreen />;
 
   return (
-    <div className="min-h-[100dvh] overflow-hidden bg-[hsl(var(--background))]">
-      <header className="relative z-20 border-b border-[hsl(var(--border)/.7)] bg-[hsl(var(--background)/.94)] backdrop-blur">
-        <div className="content-wrap flex min-h-[72px] items-center justify-between gap-4">
+    <div className="min-h-[100dvh] overflow-hidden bg-[hsl(var(--background))] pb-24 md:pb-0">
+      <header className="sticky top-0 z-30 border-b border-[hsl(var(--border)/.7)] bg-[hsl(var(--background)/.94)] backdrop-blur">
+        <div className="content-wrap flex min-h-[64px] items-center justify-between gap-4 sm:min-h-[72px]">
           <Brand />
           <div className="flex items-center gap-2">
             <span className="hidden font-mono-ui text-[10px] uppercase tracking-[.14em] text-[hsl(var(--muted-foreground))] sm:block">
               Across Melbourne
             </span>
-            <a href="#apply" className="btn-accent min-h-[42px] px-4 text-sm">
-              Apply to join <ArrowDown size={15} />
+            <a
+              href="#apply"
+              className="btn-accent min-h-[40px] px-4 text-sm sm:min-h-[42px]"
+              data-testid="link-header-apply"
+            >
+              Apply to join <ArrowRight size={15} />
             </a>
           </div>
         </div>
       </header>
 
       <main>
+        {/* Hero — the offer, the difference, the cost, and the CTA, all in one screen */}
         <section className="relative border-b border-[hsl(var(--border)/.75)] paper-grid">
           <div className="absolute -right-28 -top-28 h-80 w-80 rounded-full bg-[hsl(var(--accent)/.14)] blur-3xl" />
-          <div className="content-wrap relative grid min-h-[650px] items-center gap-10 py-14 lg:grid-cols-[1.12fr_.88fr] lg:py-20">
+          <div className="content-wrap relative grid items-center gap-8 py-8 sm:py-10 lg:grid-cols-[1.12fr_.88fr] lg:gap-10 lg:py-16">
             <div className="max-w-[760px] animate-rise">
-              <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--card)/.75)] px-3 py-2 font-mono-ui text-[10px] font-medium uppercase tracking-[.15em] text-[hsl(var(--secondary))]">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--card)/.75)] px-3 py-1.5 font-mono-ui text-[10px] font-medium uppercase tracking-[.15em] text-[hsl(var(--secondary))] sm:py-2">
                 <MapPin size={14} /> Tradies &amp; home-service businesses —
                 Across Melbourne
               </div>
-              <h1 className="mt-7 max-w-[820px] text-[clamp(3.15rem,8vw,7.25rem)] font-bold uppercase leading-[.84] tracking-[-.075em]">
+              <h1 className="mt-5 max-w-[820px] text-[clamp(2.5rem,8vw,6.5rem)] font-bold uppercase leading-[.9] tracking-[-.06em] sm:mt-7 sm:leading-[.84]">
                 More local jobs.
-                <span className="mt-2 block font-display font-normal italic normal-case text-[hsl(var(--accent))]">
-                  Less chasing.
+                <span className="mt-1 block font-display font-normal italic normal-case text-[hsl(var(--accent))] sm:mt-2">
+                  Less time chasing.
                 </span>
               </h1>
-              <p className="mt-8 max-w-xl text-xl font-semibold leading-7 tracking-[-.02em] sm:text-2xl sm:leading-8">
-                Join the SourceTradie partner network across Melbourne.
+              <p className="mt-4 max-w-xl text-lg font-semibold leading-7 tracking-[-.015em] sm:mt-6 sm:text-2xl sm:leading-8">
+                SourceTradie approaches one suitable provider at a time —
+                never the same enquiry sent to a crowd of tradies.
               </p>
-              <p className="mt-4 max-w-xl text-base leading-7 text-[hsl(var(--muted-foreground))] sm:text-lg">
-                See suitable local jobs before deciding whether you want them.
-                No subscription and no lead fees during the pilot.
+              <p className="mt-3 max-w-xl text-sm leading-6 text-[hsl(var(--muted-foreground))] sm:mt-4 sm:text-lg sm:leading-7">
+                See the suburb, scope, photos and expected price range before
+                you decide. No subscription and no lead fees during the
+                pilot.
               </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <a href="#apply" className="btn-accent min-h-[54px] px-6">
+              <div className="mt-5 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center">
+                <a
+                  href="#apply"
+                  className="btn-accent min-h-[50px] px-6 sm:min-h-[54px]"
+                  data-testid="link-hero-apply"
+                >
                   Apply to join <ArrowRight size={17} />
                 </a>
                 <p className="text-sm text-[hsl(var(--muted-foreground))]">
@@ -206,7 +218,7 @@ export default function PartnerPage() {
               </div>
             </div>
 
-            <div className="relative mx-auto w-full max-w-[470px] lg:justify-self-end">
+            <div className="relative mx-auto w-full max-w-[440px] lg:justify-self-end">
               <div className="absolute -inset-4 rotate-2 rounded-[2rem] bg-[hsl(var(--primary))]" />
               <div className="relative overflow-hidden rounded-[1.7rem] border border-white/10 bg-[hsl(var(--primary))] p-6 text-[hsl(var(--primary-foreground))] shadow-[var(--shadow-lg)] sm:p-8">
                 <img
@@ -217,22 +229,22 @@ export default function PartnerPage() {
                   className="absolute -right-2 -top-2 h-24 w-24 rotate-6 rounded-full object-cover opacity-90"
                 />
                 <SectionLabel>Built for working tradies</SectionLabel>
-                <p className="mt-5 max-w-[300px] text-3xl font-bold leading-[1.02] tracking-[-.055em]">
+                <p className="mt-5 max-w-[300px] text-2xl font-bold leading-[1.05] tracking-[-.05em] sm:text-3xl sm:leading-[1.02] sm:tracking-[-.055em]">
                   Take only the jobs you want.
                 </p>
-                <div className="mt-8 grid grid-cols-2 gap-3">
+                <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8">
                   <PilotPrice value="$0" label="Subscription" />
                   <PilotPrice value="$0" label="Lead fees" />
                 </div>
-                <div className="mt-6 space-y-3 border-t border-white/15 pt-6">
+                <div className="mt-5 space-y-2.5 border-t border-white/15 pt-5 sm:mt-6 sm:space-y-3 sm:pt-6">
                   <DarkPromise>
                     One suitable tradie approached at a time
                   </DarkPromise>
                   <DarkPromise>
-                    Customer approves your price before dispatch
+                    See the job before you decide — no obligation to accept
                   </DarkPromise>
                   <DarkPromise>
-                    No guaranteed volume or obligation to accept
+                    Free Growth Pack for approved pilot partners
                   </DarkPromise>
                 </div>
               </div>
@@ -240,16 +252,96 @@ export default function PartnerPage() {
           </div>
         </section>
 
-        <section className="content-wrap py-16 sm:py-20">
+        <MidCta text="Six quick fields, about two minutes." />
+
+        {/* Realistic product UI — what a job offer actually looks like */}
+        <section className="content-wrap py-14 sm:py-20">
+          <div className="grid gap-10 lg:grid-cols-[.95fr_1.05fr] lg:items-center">
+            <div>
+              <SectionLabel>What you'll see</SectionLabel>
+              <h2 className="mt-3 text-3xl font-bold leading-[1.02] tracking-[-.055em] sm:text-5xl">
+                A useful brief. Your decision.
+              </h2>
+              <p className="mt-5 max-w-md text-base leading-7 text-[hsl(var(--muted-foreground))]">
+                Every opportunity looks like this — suburb, scope, customer
+                photos and an expected price range, before you decide whether
+                it's worth your time.
+              </p>
+              <div className="mt-7 grid gap-3 sm:grid-cols-2">
+                <ValueCard
+                  icon={<MapPin />}
+                  title="Local detail"
+                  detail="See the suburb and job scope before responding."
+                />
+                <ValueCard
+                  icon={<Camera />}
+                  title="Customer photos"
+                  detail="Review up to three customer-supplied job photos."
+                />
+                <ValueCard
+                  icon={<DollarSign />}
+                  title="Expected range"
+                  detail="See SourceTradie’s expected price range, then confirm yours."
+                />
+                <ValueCard
+                  icon={<Clock3 />}
+                  title="Your call"
+                  detail="Accept or decline — no obligation either way."
+                />
+              </div>
+            </div>
+            <OpportunityMock />
+          </div>
+        </section>
+
+        {/* Traditional lead marketplace vs SourceTradie */}
+        <section className="border-y border-[hsl(var(--border))] bg-[hsl(var(--card)/.7)] py-14 sm:py-20">
+          <div className="content-wrap">
+            <div className="max-w-2xl">
+              <SectionLabel>The difference</SectionLabel>
+              <h2 className="mt-3 text-3xl font-bold leading-[1.02] tracking-[-.055em] sm:text-5xl">
+                Not another shared-lead scramble.
+              </h2>
+              <p className="mt-5 text-base leading-7 text-[hsl(var(--muted-foreground))]">
+                Most lead platforms sell the same enquiry to several
+                businesses and let you compete on price. SourceTradie doesn't
+                work that way.
+              </p>
+            </div>
+            <div className="mt-10 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-6 sm:p-7">
+                <p className="font-mono-ui text-[10px] font-medium uppercase tracking-[.14em] text-[hsl(var(--muted-foreground))]">
+                  Traditional lead marketplace
+                </p>
+                <ul className="mt-5 space-y-3.5 text-sm leading-6 sm:text-base">
+                  <ComparisonRow bad text="Sent to a crowd of tradies at once" />
+                  <ComparisonRow bad text="Race to quote before someone else does" />
+                  <ComparisonRow bad text="Pay per lead — shared or not" />
+                  <ComparisonRow bad text="Limited detail until you respond" />
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-[hsl(var(--secondary)/.4)] bg-[hsl(var(--secondary)/.08)] p-6 sm:p-7">
+                <p className="font-mono-ui text-[10px] font-medium uppercase tracking-[.14em] text-[hsl(var(--secondary))]">
+                  SourceTradie
+                </p>
+                <ul className="mt-5 space-y-3.5 text-sm font-medium leading-6 sm:text-base">
+                  <ComparisonRow text="Offered to one suitable tradie at a time" />
+                  <ComparisonRow text="Review the job on your own terms" />
+                  <ComparisonRow text="$0 lead fees, $0 subscription during the pilot" />
+                  <ComparisonRow text="Suburb, scope, photos and price range up front" />
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* How it works */}
+        <section className="content-wrap py-14 sm:py-20">
           <div className="max-w-2xl">
             <SectionLabel>How SourceTradie works</SectionLabel>
-            <h2 className="mt-3 text-4xl font-bold leading-none tracking-[-.06em] sm:text-5xl">
+            <h2 className="mt-3 text-3xl font-bold leading-[1.02] tracking-[-.055em] sm:text-5xl">
               A better way to review local work.
             </h2>
-            <p className="mt-5 text-base leading-7 text-[hsl(var(--muted-foreground))]">
-              SourceTradie approaches one suitable tradie at a time rather than
-              making multiple businesses chase the same enquiry.
-            </p>
           </div>
           <div className="mt-10 grid gap-3 md:grid-cols-4">
             <ProcessStep
@@ -275,48 +367,34 @@ export default function PartnerPage() {
           </div>
         </section>
 
-        <section className="border-y border-[hsl(var(--border))] bg-[hsl(var(--card)/.7)]">
-          <div className="content-wrap grid gap-10 py-16 lg:grid-cols-[.85fr_1.15fr] lg:items-center">
-            <div>
-              <SectionLabel>Know before you go</SectionLabel>
-              <h2 className="mt-3 text-4xl font-bold leading-none tracking-[-.06em] sm:text-5xl">
-                A useful brief. Your decision.
+        <MidCta text="No lead fees. No subscription. No pressure." />
+
+        {/* Growth Pack */}
+        <section className="border-y border-[hsl(var(--border))] bg-[hsl(var(--primary))] py-14 text-[hsl(var(--primary-foreground))] sm:py-20">
+          <div className="content-wrap">
+            <div className="max-w-2xl">
+              <h2 className="text-3xl font-bold uppercase leading-[1.05] tracking-[-.045em] sm:text-5xl">
+                Free personalised marketing &amp; growth pack
               </h2>
-              <p className="mt-5 max-w-lg text-base leading-7 text-[hsl(var(--muted-foreground))]">
-                Review enough information to decide whether the work fits your
-                trade, patch and diary—then accept or decline without pressure.
+              <p className="mt-5 text-base font-semibold leading-7 text-[hsl(var(--primary-foreground)/.9)]">
+                For approved pilot partners:
               </p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <ValueCard
-                icon={<MapPin />}
-                title="Local detail"
-                detail="See the suburb and job scope before responding."
-              />
-              <ValueCard
-                icon={<Camera />}
-                title="Customer photos"
-                detail="Review up to three customer-supplied job photos."
-              />
-              <ValueCard
-                icon={<DollarSign />}
-                title="Expected range"
-                detail="See SourceTradie’s expected price range, then confirm yours."
-              />
-              <ValueCard
-                icon={<Clock3 />}
-                title="Your ETA"
-                detail="Tell the customer when you can attend before dispatch."
-              />
-            </div>
+            <ul className="mt-6 grid max-w-2xl gap-3 sm:grid-cols-2">
+              <GrowthPackItem text="Online presence audit" />
+              <GrowthPackItem text="Local marketing recommendations" />
+              <GrowthPackItem text="Review-growth strategy" />
+              <GrowthPackItem text="Ready-to-use social content" />
+            </ul>
           </div>
         </section>
 
-        <section id="apply" className="scroll-mt-6 py-16 sm:py-24">
+        {/* Application */}
+        <section id="apply" className="scroll-mt-6 py-14 sm:py-24">
           <div className="content-wrap grid max-w-[1060px] gap-10 lg:grid-cols-[.75fr_1.25fr] lg:items-start">
-            <div className="lg:sticky lg:top-8">
+            <div className="lg:sticky lg:top-24">
               <SectionLabel>Partner application</SectionLabel>
-              <h2 className="mt-3 text-4xl font-bold leading-none tracking-[-.06em] sm:text-5xl">
+              <h2 className="mt-3 text-3xl font-bold leading-[1.02] tracking-[-.055em] sm:text-5xl">
                 Start with the basics.
               </h2>
               <p className="mt-5 text-base leading-7 text-[hsl(var(--muted-foreground))]">
@@ -448,6 +526,43 @@ export default function PartnerPage() {
           </div>
         </section>
 
+        {/* Objection handling */}
+        <FaqSection
+          idPrefix="partner"
+          items={[
+            {
+              question: "Is SourceTradie really free to join?",
+              answer:
+                "Yes. There's no subscription and no lead fee to apply or to receive job offers during the pilot.",
+            },
+            {
+              question: "What if I don't get any job offers?",
+              answer:
+                "Applying doesn't guarantee job offers or immediate activation — activation depends on verification, category coverage and pilot availability. We'd rather be upfront about that than overpromise.",
+            },
+            {
+              question: "Do I have to accept every job I'm offered?",
+              answer:
+                "No. You can review the suburb, scope and expected price range and decline without penalty if it doesn't suit your diary or patch.",
+            },
+            {
+              question: "What's included in the Growth Pack?",
+              answer:
+                "Approved pilot partners get a personalised profile and presentation review, guidance on strengthening their online presence, and a direct line to Partner Operations — all at no cost during the pilot.",
+            },
+            {
+              question: "How is this different from other lead platforms?",
+              answer:
+                "Most lead platforms sell the same enquiry to several businesses who then compete for it. SourceTradie offers each job to one suitable, available tradie at a time.",
+            },
+            {
+              question: "What happens after I apply?",
+              answer:
+                "Our Partner Operations team reviews your application and, if your business looks like a fit, follows up for licence, registration and insurance verification before activation.",
+            },
+          ]}
+        />
+
         <section className="bg-[hsl(var(--primary))] py-12 text-[hsl(var(--primary-foreground))]">
           <div className="content-wrap flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -461,13 +576,151 @@ export default function PartnerPage() {
             <a
               href="#apply"
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[hsl(var(--accent))] px-5 font-bold text-[hsl(var(--accent-foreground))]"
+              data-testid="link-footer-apply"
             >
               Apply to join <ArrowRight size={16} />
             </a>
           </div>
         </section>
+
+        <footer className="border-t border-[hsl(var(--border))] py-6">
+          <div className="content-wrap flex flex-col gap-2 text-xs text-[hsl(var(--muted-foreground))] sm:flex-row sm:items-center sm:justify-between">
+            <span>SourceTradie — customer-first dispatch across Melbourne.</span>
+            <Link
+              href="/for-tradies"
+              className="hover:text-[hsl(var(--foreground))] hover:underline"
+            >
+              See the full picture of how partnering works
+            </Link>
+          </div>
+        </footer>
       </main>
+
+      {/* Sticky mobile CTA */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[hsl(var(--border))] bg-[hsl(var(--background)/.97)] p-3 backdrop-blur md:hidden">
+        <a
+          href="#apply"
+          className="btn-accent min-h-[50px] w-full"
+          data-testid="link-sticky-apply"
+        >
+          Apply to join <ArrowRight size={16} />
+        </a>
+      </div>
     </div>
+  );
+}
+
+function MidCta({ text }: { text: string }) {
+  return (
+    <div className="content-wrap flex flex-col items-center gap-3 py-10 text-center sm:flex-row sm:justify-between sm:text-left">
+      <p className="text-sm font-semibold text-[hsl(var(--muted-foreground))] sm:text-base">
+        {text}
+      </p>
+      <a href="#apply" className="btn-main" data-testid="link-mid-apply">
+        Apply to join <ArrowRight size={16} />
+      </a>
+    </div>
+  );
+}
+
+function OpportunityMock() {
+  return (
+    <div className="relative mx-auto w-full max-w-[420px]">
+      <article
+        className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-[var(--shadow-lg)] sm:p-6"
+        aria-hidden="true"
+      >
+        <span className="inline-flex items-center gap-2 rounded-full bg-[hsl(var(--secondary)/.14)] px-2.5 py-1 font-mono-ui text-[10px] font-medium uppercase tracking-[.08em] text-[hsl(var(--secondary))]">
+          <span className="status-dot" /> New opportunity
+        </span>
+        <h3 className="mt-3 text-lg font-bold tracking-[-.03em]">
+          Kitchen tap replacement
+        </h3>
+        <p className="mt-2 flex items-center gap-3 text-sm text-[hsl(var(--muted-foreground))]">
+          <span className="flex items-center gap-1.5">
+            <MapPin size={15} /> Reservoir
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Clock3 size={15} /> This afternoon
+          </span>
+        </p>
+        <div className="mt-4 rounded-xl border border-[hsl(var(--border))] p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
+            Expected price range
+          </p>
+          <p className="mt-1 text-2xl font-bold tracking-[-.04em]">
+            $180–$240
+          </p>
+          <p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+            Replace a leaking mixer tap. Customer has supplied photos and
+            access is straightforward.
+          </p>
+        </div>
+        <div className="mt-4">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
+            Customer job photos
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <PhotoPlaceholder />
+            <PhotoPlaceholder />
+            <PhotoPlaceholder />
+          </div>
+        </div>
+        <div className="mt-5 flex gap-2">
+          <span className="btn-main pointer-events-none flex-1 text-sm">
+            <Check size={15} /> Accept
+          </span>
+          <span className="btn-quiet pointer-events-none flex-1 border text-sm">
+            <X size={15} /> Decline
+          </span>
+        </div>
+      </article>
+      <p className="mt-3 text-center text-[11px] text-[hsl(var(--muted-foreground))]">
+        Example opportunity — shown for illustration only
+      </p>
+    </div>
+  );
+}
+
+function PhotoPlaceholder() {
+  return (
+    <div
+      className="flex aspect-[4/3] items-center justify-center rounded-lg border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--muted)/.5)] text-[hsl(var(--muted-foreground))]"
+      aria-hidden="true"
+    >
+      <Camera size={16} />
+    </div>
+  );
+}
+
+function ComparisonRow({ text, bad = false }: { text: string; bad?: boolean }) {
+  return (
+    <li className="flex items-start gap-2.5">
+      {bad ? (
+        <X
+          size={16}
+          className="mt-0.5 shrink-0 text-[hsl(var(--destructive))]"
+        />
+      ) : (
+        <Check
+          size={16}
+          className="mt-0.5 shrink-0 text-[hsl(var(--secondary))]"
+        />
+      )}
+      <span>{text}</span>
+    </li>
+  );
+}
+
+function GrowthPackItem({ text }: { text: string }) {
+  return (
+    <li className="flex items-center gap-3 rounded-2xl border border-white/12 bg-white/6 p-4 text-sm font-medium leading-6 sm:text-base">
+      <CheckCircle2
+        size={18}
+        className="shrink-0 text-[hsl(var(--accent))]"
+      />
+      {text}
+    </li>
   );
 }
 
@@ -533,7 +786,7 @@ function Field({
 function PilotPrice({ value, label }: { value: string; label: string }) {
   return (
     <div className="rounded-2xl border border-white/15 bg-white/8 p-4">
-      <p className="text-4xl font-bold tracking-[-.07em] text-[hsl(var(--accent))]">
+      <p className="text-3xl font-bold tracking-[-.07em] text-[hsl(var(--accent))] sm:text-4xl">
         {value}
       </p>
       <p className="mt-1 text-xs text-white/65">{label} during pilot</p>
