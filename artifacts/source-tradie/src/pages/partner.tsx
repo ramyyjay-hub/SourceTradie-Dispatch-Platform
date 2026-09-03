@@ -171,7 +171,7 @@ export default function PartnerPage() {
   if (submitted) return <SuccessScreen />;
 
   return (
-    <div className="min-h-[100dvh] overflow-hidden bg-[hsl(var(--background))] pb-24 md:pb-0">
+    <div className="min-h-[100dvh] bg-[hsl(var(--background))] pb-24 md:pb-0">
       <header className="sticky top-0 z-30 border-b border-[hsl(var(--border)/.7)] bg-[hsl(var(--background)/.94)] backdrop-blur">
         <div className="content-wrap flex min-h-[64px] items-center justify-between gap-4 sm:min-h-[72px]">
           <Brand />
@@ -193,7 +193,7 @@ export default function PartnerPage() {
 
       <main>
         {/* Hero — the offer, the difference, the cost, and the CTA, all in one screen */}
-        <section className="relative border-b border-[hsl(var(--border)/.75)] paper-grid">
+        <section className="relative overflow-hidden border-b border-[hsl(var(--border)/.75)] paper-grid">
           <div className="absolute -right-28 -top-28 h-80 w-80 rounded-full bg-[hsl(var(--accent)/.14)] blur-3xl" />
           <div className="content-wrap relative grid items-center gap-8 py-8 sm:py-10 lg:grid-cols-[1.12fr_.88fr] lg:gap-10 lg:py-16">
             <div className="max-w-[760px] animate-rise">
