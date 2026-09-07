@@ -23,6 +23,7 @@ import {
   readPartnerAttribution,
   recordPartnerFunnelEvent,
 } from "@/lib/partner-funnel";
+import { trackMetaLead } from "@/lib/meta-pixel";
 
 // Client-side routing intercepts the browser's native hash-anchor scroll, so
 // every "#apply" CTA needs to trigger the scroll itself. The href is kept so
@@ -70,6 +71,7 @@ export default function PartnerPage() {
   const funnelSessionId = useRef(crypto.randomUUID());
   const attribution = useRef(readPartnerAttribution(window.location.search));
   const applicationStarted = useRef(false);
+  const leadEventFired = useRef(false);
   const [form, setForm] = useState(initialForm);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
@@ -159,7 +161,16 @@ export default function PartnerPage() {
         emergencyJobs: false,
       },
       {
-        onSuccess: () => setSubmitted(true),
+        onSuccess: () => {
+          // Meta Lead event: fires exactly once, only once the backend has
+          // confirmed the application was created — never on page load,
+          // form start, submit, validation errors or failed requests.
+          if (!leadEventFired.current) {
+            leadEventFired.current = true;
+            trackMetaLead();
+          }
+          setSubmitted(true);
+        },
         onError: () =>
           setError(
             "We could not confirm your application. Your submission reference is retained, so you can safely try again without creating a duplicate.",

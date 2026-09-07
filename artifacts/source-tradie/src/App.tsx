@@ -24,6 +24,7 @@ import {
 } from "wouter";
 import { AuthProvider } from "@/context/auth-context";
 import { RequireRole } from "@/components/auth/require-role";
+import { trackMetaPageView } from "@/lib/meta-pixel";
 
 const queryClient = new QueryClient();
 const siteOrigin = "https://sourcetradie.com.au";
@@ -103,6 +104,20 @@ function RouteSeoPolicy() {
   return null;
 }
 
+// Fires a Meta Pixel PageView on the initial load and on every
+// client-side route change. trackMetaPageView() loads/initialises the
+// pixel itself on the first call, so this never double-inits or fires
+// more than one PageView per location.
+function MetaPixelPageView() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    trackMetaPageView();
+  }, [location]);
+
+  return null;
+}
+
 function Router() {
   return (
     <RoutedErrorBoundary>
@@ -146,6 +161,7 @@ function App() {
         <AuthProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <RouteSeoPolicy />
+            <MetaPixelPageView />
             <Router />
           </WouterRouter>
         </AuthProvider>
