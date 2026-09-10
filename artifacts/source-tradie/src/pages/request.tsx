@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -34,6 +34,7 @@ import {
 } from "@/components/source-ui";
 import { extractExplicitPreferredTime } from "@/lib/intake-time";
 import { getCustomerLifecyclePresentation } from "@/lib/customer-lifecycle";
+import { trackHomeownerFunnelEvent } from "@/lib/homeowner-funnel";
 import {
   getNextRequestFlowStep,
   getPreviousRequestFlowStep,
@@ -48,7 +49,7 @@ const initialForm = {
   trade: "Not sure",
   suburb: "",
   postcode: "",
-  urgency: "Soon",
+  urgency: "Flexible",
   preferredTime: "Flexible",
   customerName: "",
   customerPhone: "",
@@ -86,6 +87,7 @@ function RequestFlow({
   const [safetyConfirmed, setSafetyConfirmed] = useState(false);
   const [preferredTimeEdited, setPreferredTimeEdited] = useState(false);
   const [error, setError] = useState("");
+  const started = useRef(false);
   const createJob = useCreateJob();
   const pricingPreview = usePreviewPricing();
   const urgentSignal = useMemo(
@@ -95,7 +97,15 @@ function RequestFlow({
   const flowSteps = getRequestFlowSteps(urgentSignal);
   const stepIndex = flowSteps.indexOf(step);
 
+  useEffect(() => {
+    trackHomeownerFunnelEvent("homeowner_request_viewed");
+  }, []);
+
   const update = (key: keyof typeof initialForm, value: string) => {
+    if (!started.current) {
+      started.current = true;
+      trackHomeownerFunnelEvent("homeowner_request_started");
+    }
     if (key === "preferredTime") {
       setPreferredTimeEdited(true);
     }
@@ -181,7 +191,10 @@ function RequestFlow({
         data: form,
       },
       {
-        onSuccess: (job) => void uploadAndFinish(job),
+        onSuccess: (job) => {
+          trackHomeownerFunnelEvent("homeowner_request_submitted", job.id);
+          void uploadAndFinish(job);
+        },
         onError: () =>
           setError("We couldn’t send that just now. Please try again."),
       },
@@ -207,11 +220,11 @@ function RequestFlow({
         <BackLink href="/">Back home</BackLink>
         <div className="mt-8 flex items-start justify-between gap-4">
           <div>
-            <SectionLabel>New home request</SectionLabel>
+            <SectionLabel>Tell us once</SectionLabel>
             <h1 className="mt-2 max-w-xl text-4xl font-bold leading-[.95] tracking-[-.07em] md:text-6xl">
               {step === "review"
                 ? "Review your request."
-                : "Let’s get a clear picture."}
+                : "What needs sorting?"}
             </h1>
           </div>
           <StepIndicator
@@ -355,7 +368,7 @@ function ProblemStep({
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
           <label className="label" htmlFor="trade">
-            Which service do you need?
+            Primary trade or service (optional)
           </label>
           <select
             id="trade"
@@ -373,7 +386,7 @@ function ProblemStep({
             <option>Other</option>
           </select>
           <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
-            Not sure is fine — we’ll help identify the right trade.
+            Not sure is fine — SourceTradie will assess the request and identify the likely service.
           </p>
         </div>
 
@@ -388,10 +401,10 @@ function ProblemStep({
             onChange={(event) => update("urgency", event.target.value)}
             data-testid="select-urgency"
           >
-            <option>Not urgent</option>
-            <option>Soon</option>
+            <option>ASAP</option>
             <option>Today</option>
-            <option>Emergency</option>
+            <option>This week</option>
+            <option>Flexible</option>
           </select>
         </div>
       </div>
@@ -719,8 +732,9 @@ function ReviewStep({
           size={18}
           className="mt-1 shrink-0 text-[hsl(var(--secondary))]"
         />
-        You’ll receive the tradie’s confirmed price and ETA before they’re
-        dispatched. Your exact address isn’t shared until you approve.
+        SourceTradie will assess the request and source a suitable local provider.
+        You stay in control: nothing proceeds, and your exact address is not
+        shared, until you approve the next step.
       </div>
     </div>
   );
@@ -799,9 +813,9 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
       <main className="content-wrap max-w-[820px] py-12 md:py-20">
         <SectionLabel>Request {job.reference}</SectionLabel>
         <h1 className="mt-3 max-w-2xl text-5xl font-bold leading-[.92] tracking-[-.075em]">
-          We’ll keep you posted,
+          We’re sourcing
           <br />
-          <span className="font-display font-normal italic">not guessing.</span>
+          <span className="font-display font-normal italic">your tradie.</span>
         </h1>
 
         <div className="mt-10 rounded-[1.5rem] bg-[hsl(var(--primary))] p-6 text-[hsl(var(--primary-foreground))] md:p-9">
@@ -852,7 +866,7 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
           <div className="mt-8 rounded-xl bg-[hsl(var(--primary-foreground)/.08)] p-4 text-sm leading-6 text-[hsl(var(--primary-foreground)/.68)]">
             {job.acceptedTradie
               ? `${job.acceptedTradie.businessName} (${job.acceptedTradie.contactName}) confirmed a ${job.acceptedTradie.confirmedPriceKind} price of ${job.acceptedTradie.confirmedPriceCents ? formatPrice(job.acceptedTradie.confirmedPriceCents) : "—"}.${job.acceptedTradie.eta ? ` ETA/status: ${job.acceptedTradie.eta}.` : ""}`
-              : "Truthful status: no tradie has been confirmed yet. We’ll update this after a tradie accepts."}
+              : "We’re reviewing the job and approaching a suitable local provider. If we cannot find someone appropriate, we’ll tell you clearly rather than inventing a match."}
           </div>
           {job.status === "awaiting_customer_confirmation" &&
             job.acceptedTradie && (
@@ -885,7 +899,7 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
                 >
                   {confirmDispatch.isPending
                     ? "Confirming"
-                    : "Confirm & send my tradie"}
+                    : "Approve this next step"}
                 </button>
               </div>
             )}
