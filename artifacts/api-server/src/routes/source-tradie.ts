@@ -79,6 +79,17 @@ const PartnerFunnelEventBody = z
     attribution: PartnerAttributionBody.optional(),
   })
   .strict();
+const HomeownerFunnelEventBody = z
+  .object({
+    sessionId: z.string().uuid(),
+    eventType: z.enum([
+      "homeowner_request_viewed",
+      "homeowner_request_started",
+      "homeowner_request_submitted",
+    ]),
+    jobId: z.number().int().positive().optional(),
+  })
+  .strict();
 
 const JobIntakeCorrectionBody = z.object({
   description: z.string().trim().min(4),
@@ -163,6 +174,15 @@ export function createSourceTradieRouter(
       statusAccessToken: job.statusAccessToken,
       statusAccessUrl: `/request/${job.id}?token=${job.statusAccessToken}`,
     });
+  });
+
+  router.post("/homeowner-funnel/events", async (req, res) => {
+    const parsed = HomeownerFunnelEventBody.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid funnel event." });
+    }
+    await repository.recordHomeownerFunnelEvent(parsed.data).catch(() => false);
+    return res.status(204).end();
   });
 
   router.get("/jobs/:id", async (req, res) => {
@@ -356,6 +376,28 @@ export function createSourceTradieRouter(
     requireAdmin,
     async (_req, res) => {
       res.json(await repository.getPartnerAcquisitionSummary());
+    },
+  );
+
+  router.get(
+    "/admin/candidate-providers",
+    authRequired,
+    requireAdmin,
+    async (_req, res) => {
+      res.json(await repository.listCandidateProviders());
+    },
+  );
+
+  router.get(
+    "/admin/provider-outreach-attempts",
+    authRequired,
+    requireAdmin,
+    async (req, res) => {
+      const jobId = typeof req.query.jobId === "string" ? Number(req.query.jobId) : undefined;
+      if (jobId !== undefined && (!Number.isInteger(jobId) || jobId <= 0)) {
+        return res.status(400).json({ error: "Invalid job identifier." });
+      }
+      return res.json(await repository.listProviderOutreachAttempts(jobId));
     },
   );
 

@@ -1,8 +1,10 @@
 import crypto from "node:crypto";
 import {
   appUsersTable,
+  candidateProvidersTable,
   dispatchOffersTable,
   dispatchStateEnum,
+  homeownerFunnelEventsTable,
   jobAiAssessmentsTable,
   jobImagesTable,
   jobIntakeSubmissionsTable,
@@ -14,6 +16,7 @@ import {
   partnerServiceAreasTable,
   partnersTable,
   partnerServicesTable,
+  providerOutreachAttemptsTable,
 } from "@workspace/db/schema";
 import type { db as WorkspaceDb } from "@workspace/db";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
@@ -631,6 +634,49 @@ export class SourceTradieRepository {
         assessmentsByJobId.get(row.id) ?? null,
       ),
     );
+  }
+
+  async recordHomeownerFunnelEvent(input: {
+    sessionId: string;
+    eventType: string;
+    jobId?: number;
+  }): Promise<boolean> {
+    const rows = await this.database
+      .insert(homeownerFunnelEventsTable)
+      .values({
+        sessionId: input.sessionId,
+        eventType: input.eventType,
+        jobId: input.jobId ?? null,
+      })
+      .onConflictDoNothing()
+      .returning({ id: homeownerFunnelEventsTable.id });
+    return rows.length > 0;
+  }
+
+  async listCandidateProviders() {
+    return this.database
+      .select({
+        id: candidateProvidersTable.id,
+        businessName: candidateProvidersTable.businessName,
+        trade: candidateProvidersTable.trade,
+        phone: candidateProvidersTable.phone,
+        serviceSuburbs: candidateProvidersTable.serviceSuburbs,
+        servicePostcodes: candidateProvidersTable.servicePostcodes,
+        verificationStatus: candidateProvidersTable.verificationStatus,
+        outreachStatus: candidateProvidersTable.outreachStatus,
+        optedOutAt: candidateProvidersTable.optedOutAt,
+        tier: candidateProvidersTable.tier,
+      })
+      .from(candidateProvidersTable)
+      .orderBy(desc(candidateProvidersTable.updatedAt));
+  }
+
+  async listProviderOutreachAttempts(jobId?: number) {
+    return this.database
+      .select()
+      .from(providerOutreachAttemptsTable)
+      .where(jobId ? eq(providerOutreachAttemptsTable.jobId, jobId) : undefined)
+      .orderBy(desc(providerOutreachAttemptsTable.createdAt));
   }
 
   async createJob(input: {

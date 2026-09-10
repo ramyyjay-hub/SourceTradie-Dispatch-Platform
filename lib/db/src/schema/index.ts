@@ -293,6 +293,87 @@ export const partnerFunnelEventsTable = pgTable(
   ],
 );
 
+export const homeownerFunnelEventsTable = pgTable(
+  "homeowner_funnel_events",
+  {
+    id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+    sessionId: uuid("session_id").notNull(),
+    eventType: text("event_type").notNull(),
+    jobId: integer("job_id").references(() => jobsTable.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("homeowner_funnel_events_session_event_uidx").on(table.sessionId, table.eventType),
+    index("homeowner_funnel_events_job_id_idx").on(table.jobId),
+    index("homeowner_funnel_events_created_at_idx").on(table.createdAt),
+  ],
+);
+
+export const candidateProvidersTable = pgTable(
+  "candidate_providers",
+  {
+    id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+    businessName: text("business_name").notNull(),
+    contactName: text("contact_name"),
+    trade: text("trade").notNull(),
+    subServices: jsonb("sub_services").$type<string[]>().notNull().default([]),
+    phone: text("phone").notNull(),
+    website: text("website"),
+    serviceSuburbs: jsonb("service_suburbs").$type<string[]>().notNull().default([]),
+    servicePostcodes: jsonb("service_postcodes").$type<string[]>().notNull().default([]),
+    normalHours: text("normal_hours"),
+    afterHoursAvailable: boolean("after_hours_available").notNull().default(false),
+    licenceDetails: text("licence_details"),
+    licenceStatus: text("licence_status").notNull().default("not_checked"),
+    insuranceStatus: text("insurance_status").notNull().default("not_checked"),
+    source: text("source").notNull(),
+    verificationStatus: text("verification_status").notNull().default("candidate"),
+    outreachStatus: text("outreach_status").notNull().default("not_contacted"),
+    lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
+    optedOutAt: timestamp("opted_out_at", { withTimezone: true }),
+    responseCount: integer("response_count").notNull().default(0),
+    acceptanceCount: integer("acceptance_count").notNull().default(0),
+    tier: text("tier").notNull().default("candidate"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("candidate_providers_phone_uidx").on(table.phone),
+    index("candidate_providers_trade_idx").on(table.trade),
+    index("candidate_providers_outreach_idx").on(table.outreachStatus),
+  ],
+);
+
+export const providerOutreachAttemptsTable = pgTable(
+  "provider_outreach_attempts",
+  {
+    id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+    jobId: integer("job_id").notNull().references(() => jobsTable.id, { onDelete: "cascade" }),
+    candidateProviderId: integer("candidate_provider_id").references(() => candidateProvidersTable.id, { onDelete: "restrict" }),
+    partnerId: integer("partner_id").references(() => partnersTable.id, { onDelete: "restrict" }),
+    channel: text("channel").notNull().default("sms"),
+    status: text("status").notNull().default("queued"),
+    providerMessageId: text("provider_message_id"),
+    responseCode: text("response_code"),
+    responsePayload: jsonb("response_payload").$type<Record<string, unknown>>(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    timeoutAt: timestamp("timeout_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("provider_outreach_attempts_idempotency_uidx").on(table.idempotencyKey),
+    uniqueIndex("provider_outreach_one_active_per_job_uidx").on(table.jobId).where(sql`status IN ('queued', 'sent', 'awaiting_response', 'accepted')`),
+    index("provider_outreach_attempts_job_idx").on(table.jobId),
+  ],
+);
+
+export const operationalSettingsTable = pgTable("operational_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const partnerServiceAreasTable = pgTable(
   "partner_service_areas",
   {
