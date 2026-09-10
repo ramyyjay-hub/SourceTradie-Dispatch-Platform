@@ -18,6 +18,7 @@ import type { SmsProvider } from "../lib/sms-provider";
 import { matchMelbournePricing } from "../lib/pricing";
 import { requireAuth } from "../middlewares/auth";
 import { requireAdmin, requirePartnerOrAdmin } from "../middlewares/authorize";
+import { createFixedWindowRateLimit } from "../middlewares/rate-limit";
 import {
   createJobPhotoStorage,
   createOpaqueJobPhotoKey,
@@ -90,6 +91,56 @@ const HomeownerFunnelEventBody = z
     jobId: z.number().int().positive().optional(),
   })
   .strict();
+const CandidateProviderBody = z
+  .object({
+    businessName: z.string().trim().min(2).max(200),
+    contactName: z.string().trim().max(160).optional(),
+    trade: z.string().trim().min(2).max(120),
+    subServices: z.array(z.string().trim().min(1).max(120)).max(30).default([]),
+    phone: z.string().trim().min(8).max(32),
+    website: z.string().url().max(500).optional(),
+    serviceSuburbs: z.array(z.string().trim().min(1).max(120)).max(100).default([]),
+    servicePostcodes: z.array(z.string().regex(/^\d{4}$/)).max(100).default([]),
+    normalHours: z.string().trim().max(500).optional(),
+    afterHoursAvailable: z.boolean().default(false),
+    licenceDetails: z.string().trim().max(500).optional(),
+    licenceStatus: z.enum(["not_checked", "checked", "restricted", "expired"]),
+    insuranceStatus: z.enum(["not_checked", "checked", "missing", "expired"]),
+    source: z.string().trim().min(2).max(200),
+    verificationStatus: z.enum(["candidate", "checked", "rejected"]),
+    tier: z.enum(["candidate", "backup", "preferred"]),
+  })
+  .strict();
+const CandidateProviderControlBody = z
+  .object({
+    action: z.enum(["mark_dnc", "clear_dnc", "set_verification", "set_tier"]),
+    reason: z.string().trim().min(3).max(500).optional(),
+    verificationStatus: z.enum(["candidate", "checked", "rejected"]).optional(),
+    tier: z.enum(["candidate", "backup", "preferred"]).optional(),
+  })
+  .strict();
+const JobSourcingControlBody = z
+  .object({
+    paused: z.boolean().optional(),
+    classificationOverride: z.string().trim().min(2).max(120).nullable().optional(),
+    operatorNote: z.string().trim().max(1000).nullable().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0);
+const QueueCandidateBody = z
+  .object({
+    candidateProviderId: z.number().int().positive(),
+    timeoutAt: z.coerce.date(),
+    idempotencyKey: z.string().trim().min(12).max(200),
+  })
+  .strict();
+const OutreachOutcomeBody = z
+  .object({
+    status: z.enum(["declined", "no_response", "cancelled", "accepted", "needs_human", "opted_out"]),
+    responseCode: z.string().trim().max(120).optional(),
+    inboundProviderMessageId: z.string().trim().min(4).max(200).optional(),
+  })
+  .strict();
 
 const JobIntakeCorrectionBody = z.object({
   description: z.string().trim().min(4),
@@ -126,6 +177,21 @@ export function createSourceTradieRouter(
     options.smsProvider,
   );
   const authRequired = requireAuth(repository, options.tokenVerifier);
+  const publicReadRateLimit = createFixedWindowRateLimit({
+    scope: "public-read",
+    windowMs: 60_000,
+    max: 120,
+  });
+  const publicWriteRateLimit = createFixedWindowRateLimit({
+    scope: "public-write",
+    windowMs: 10 * 60_000,
+    max: 12,
+  });
+  const uploadRateLimit = createFixedWindowRateLimit({
+    scope: "photo-upload",
+    windowMs: 10 * 60_000,
+    max: 20,
+  });
   const receiveJobPhotos = multer({
     storage: multer.memoryStorage(),
     limits: { files: MAX_JOB_PHOTOS, fileSize: MAX_JOB_PHOTO_BYTES },
@@ -147,7 +213,7 @@ export function createSourceTradieRouter(
     });
   });
 
-  router.post("/pricing/preview", (req, res) => {
+  router.post("/pricing/preview", publicReadRateLimit, (req, res) => {
     const parsed = PricingPreviewBody.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
@@ -157,7 +223,7 @@ export function createSourceTradieRouter(
     return res.json(matchMelbournePricing(parsed.data));
   });
 
-  router.post("/jobs", async (req, res) => {
+  router.post("/jobs", publicWriteRateLimit, async (req, res) => {
     const parsed = CreateJobBody.safeParse(req.body);
     if (!parsed.success) {
       return res
@@ -176,7 +242,7 @@ export function createSourceTradieRouter(
     });
   });
 
-  router.post("/homeowner-funnel/events", async (req, res) => {
+  router.post("/homeowner-funnel/events", publicReadRateLimit, async (req, res) => {
     const parsed = HomeownerFunnelEventBody.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: "Invalid funnel event." });
@@ -210,7 +276,7 @@ export function createSourceTradieRouter(
     return res.json(job);
   });
 
-  router.post("/jobs/:id/photos", async (req, res) => {
+  router.post("/jobs/:id/photos", uploadRateLimit, async (req, res) => {
     const parsed = GetJobParams.safeParse(req.params);
     const token =
       typeof req.query.token === "string" ? req.query.token.trim() : "";
@@ -388,6 +454,101 @@ export function createSourceTradieRouter(
     },
   );
 
+  router.post(
+    "/admin/candidate-providers",
+    authRequired,
+    requireAdmin,
+    async (req, res) => {
+      const parsed = CandidateProviderBody.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid candidate provider details." });
+      }
+      const result = await repository.createCandidateProvider(parsed.data);
+      if (result.kind === "invalid_mobile") {
+        return res.status(400).json({ error: "A valid Australian mobile number is required." });
+      }
+      return res.status(201).json(result.provider);
+    },
+  );
+
+  router.patch(
+    "/admin/candidate-providers/:id/control",
+    authRequired,
+    requireAdmin,
+    async (req, res) => {
+      const id = Number(req.params.id);
+      const parsed = CandidateProviderControlBody.safeParse(req.body);
+      if (!Number.isInteger(id) || id <= 0 || !parsed.success) {
+        return res.status(400).json({ error: "Invalid candidate control request." });
+      }
+      if (parsed.data.action === "clear_dnc" && !parsed.data.reason) {
+        return res.status(400).json({ error: "An auditable consent-reset reason is required." });
+      }
+      const provider = await repository.controlCandidateProvider(
+        id,
+        parsed.data,
+        req.auth!.principal.authUserId,
+      );
+      return provider
+        ? res.json(provider)
+        : res.status(404).json({ error: "Candidate provider not found." });
+    },
+  );
+
+  router.patch(
+    "/admin/jobs/:id/sourcing-control",
+    authRequired,
+    requireAdmin,
+    async (req, res) => {
+      const id = Number(req.params.id);
+      const parsed = JobSourcingControlBody.safeParse(req.body);
+      if (!Number.isInteger(id) || id <= 0 || !parsed.success) {
+        return res.status(400).json({ error: "Invalid sourcing control request." });
+      }
+      const job = await repository.updateJobSourcingControl(id, parsed.data);
+      return job ? res.json(job) : res.status(404).json({ error: "Job not found." });
+    },
+  );
+
+  router.post(
+    "/admin/jobs/:id/provider-outreach",
+    authRequired,
+    requireAdmin,
+    async (req, res) => {
+      const jobId = Number(req.params.id);
+      const parsed = QueueCandidateBody.safeParse(req.body);
+      if (!Number.isInteger(jobId) || jobId <= 0 || !parsed.success) {
+        return res.status(400).json({ error: "Invalid outreach request." });
+      }
+      const result = await repository.queueCandidateOutreach({
+        jobId,
+        ...parsed.data,
+      });
+      if (result.kind !== "ok") {
+        return res.status(409).json({ error: result.kind });
+      }
+      return res.status(201).json(result.attempt);
+    },
+  );
+
+  router.patch(
+    "/admin/provider-outreach-attempts/:id/outcome",
+    authRequired,
+    requireAdmin,
+    async (req, res) => {
+      const id = Number(req.params.id);
+      const parsed = OutreachOutcomeBody.safeParse(req.body);
+      if (!Number.isInteger(id) || id <= 0 || !parsed.success) {
+        return res.status(400).json({ error: "Invalid outreach outcome." });
+      }
+      const result = await repository.recordOutreachOutcome(id, parsed.data);
+      if (result.kind !== "ok") {
+        return res.status(result.kind === "not_found" ? 404 : 409).json({ error: result.kind });
+      }
+      return res.json(result.attempt);
+    },
+  );
+
   router.get(
     "/admin/provider-outreach-attempts",
     authRequired,
@@ -497,7 +658,7 @@ export function createSourceTradieRouter(
     return res.json(result.job);
   });
 
-  router.post("/partners", async (req, res) => {
+  router.post("/partners", publicWriteRateLimit, async (req, res) => {
     const parsed = PartnerApplicationBody.safeParse(req.body);
     if (!parsed.success) {
       return res
@@ -514,7 +675,7 @@ export function createSourceTradieRouter(
     });
   });
 
-  router.post("/partner-funnel/events", async (req, res) => {
+  router.post("/partner-funnel/events", publicReadRateLimit, async (req, res) => {
     const parsed = PartnerFunnelEventBody.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: "Invalid funnel event." });

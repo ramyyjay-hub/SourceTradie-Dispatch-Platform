@@ -12,6 +12,7 @@ const pinoHttp = (pinoHttpModule.default ??
   pinoHttpModule) as unknown as PinoHttpFactory;
 
 const app: Express = express();
+app.set("trust proxy", 1);
 
 app.use(
   pinoHttp({

@@ -11,6 +11,20 @@ type ServicePage = {
   note: string;
 };
 
+const serviceGuidance: Record<string, string> = {
+  "/find-a-tradie": "A useful request explains what changed, where the problem is and when access is available. SourceTradie uses those details to determine whether the job needs a licensed trade, a specialist repairer or a general home-service provider.",
+  "/find-a-plumber-melbourne": "For plumbing requests, tell us where water is appearing, whether fixtures still work and whether you have isolated the supply. Photos of the affected fixture and surrounding area can help a plumber assess likely tools, parts and urgency before attendance.",
+  "/find-an-electrician-melbourne": "For electrical faults, describe which circuit, outlet, light or appliance is affected and whether a safety switch has tripped. Never remove covers or touch damaged wiring for a photo. SourceTradie routes regulated electrical work only to an appropriately registered provider.",
+  "/heating-air-conditioning-repair-melbourne": "Include the system type, brand, visible model number, error code and whether the indoor and outdoor units operate. Those details help distinguish servicing, electrical faults, refrigeration work and replacement discussions.",
+  "/locksmith-melbourne": "Tell us whether you are locked out, the lock is damaged or you want a planned replacement. Note the door and lock style without sharing keys, security codes or sensitive access information in photos.",
+  "/roof-repair-melbourne": "Explain when the leak appears, the internal room affected and any visible gutter or roof damage from ground level. Water can travel before it becomes visible, so the attending provider may need to inspect rather than promise a repair price from photos alone.",
+  "/appliance-repair-melbourne": "Provide the appliance type, brand, model and exact symptoms, including error codes, unusual sounds or leaks. This helps identify whether a repairer services that brand and whether likely parts availability should be checked.",
+  "/pest-control-melbourne": "Describe the pest, signs observed, affected rooms and whether children or pets use the area. Treatment approach and preparation vary by pest and property, so a provider may need clarification before confirming scope.",
+  "/garage-door-repair-melbourne": "Include the door style, motor brand, what happens when the control is used and whether cables, tracks or panels appear damaged. Do not attempt to release springs or support a heavy door yourself.",
+  "/handyman-melbourne": "Group related minor repairs and attach a clear photo of each area. SourceTradie separates general maintenance from plumbing, electrical, structural or other work that legally or safely requires a specialist.",
+  "/rubbish-removal-melbourne": "List the material types, approximate volume, stairs or access restrictions and whether anything is heavy. Paint, chemicals, asbestos, batteries and other regulated waste must be identified because ordinary removal services may not accept them.",
+};
+
 export const homeownerServicePages: Record<string, ServicePage> = {
   "/find-a-tradie": { name: "local tradie", title: "Find a suitable local tradie without the runaround", intro: "Tell SourceTradie what is wrong once. We assess the job, identify the likely service and source a suitable local provider around Melbourne.", examples: ["Home repairs and urgent faults", "Licensed plumbing and electrical work", "Maintenance, appliances and outdoor services"], note: "You do not need to know which trade to call before you start." },
   "/find-a-plumber-melbourne": { name: "plumber", title: "Need a plumber in Melbourne?", intro: "Describe the leak, blockage, hot-water issue or plumbing problem. SourceTradie coordinates the search for a suitable local plumber.", examples: ["Blocked drains and toilets", "Leaks and burst pipes", "Hot-water faults"], note: "Urgent water or gas hazards may require emergency services or the relevant utility first." },
@@ -28,17 +42,29 @@ export const homeownerServicePages: Record<string, ServicePage> = {
 export default function HomeServicePage() {
   const [location] = useLocation();
   const page = homeownerServicePages[location] ?? homeownerServicePages["/find-a-tradie"];
-  const faq = {
+  const structuredData = {
     "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: [
-      { "@type": "Question", name: "How does SourceTradie work?", acceptedAnswer: { "@type": "Answer", text: "Describe the job once. SourceTradie assesses the request and approaches a suitable local provider one at a time. You review the next step before anything proceeds." } },
-      { "@type": "Question", name: "Is a provider guaranteed?", acceptedAnswer: { "@type": "Answer", text: "No. Provider availability and price are not guaranteed. SourceTradie will tell you clearly if a suitable provider cannot be found." } },
+    "@graph": [
+      {
+        "@type": "Service",
+        name: page.title,
+        serviceType: page.name,
+        areaServed: { "@type": "City", name: "Melbourne" },
+        provider: { "@id": "https://sourcetradie.com.au/#organization" },
+        url: `https://sourcetradie.com.au${location}`,
+      },
+      {
+        "@type": "FAQPage",
+        mainEntity: [
+          { "@type": "Question", name: "How does SourceTradie work?", acceptedAnswer: { "@type": "Answer", text: "Describe the job once. SourceTradie assesses the request and approaches a suitable local provider one at a time. You review the next step before anything proceeds." } },
+          { "@type": "Question", name: "Is a provider guaranteed?", acceptedAnswer: { "@type": "Answer", text: "No. Provider availability and price are not guaranteed. SourceTradie will tell you clearly if a suitable provider cannot be found." } },
+        ],
+      },
     ],
   };
   return (
     <div className="min-h-screen bg-[hsl(var(--background))]">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faq) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
       <header className="border-b border-[hsl(var(--border))]"><div className="content-wrap flex min-h-[76px] items-center justify-between"><Brand /><Link href="/request" className="btn-accent">Find my tradie <ArrowRight size={16} /></Link></div></header>
       <main>
         <section className="content-wrap grid gap-10 py-16 md:grid-cols-[1.1fr_.9fr] md:py-24">
@@ -55,7 +81,7 @@ export default function HomeServicePage() {
           </div>
         </section>
         <section className="border-y border-[hsl(var(--border))] bg-[hsl(var(--card))]"><div className="content-wrap grid gap-6 py-14 md:grid-cols-3"><Info icon={<MapPin />} title="Local sourcing" text="We use your suburb, job type and urgency to look for an appropriate provider." /><Info icon={<ShieldCheck />} title="You stay in control" text="Nothing proceeds until you approve the next step. Exact contact details stay protected until confirmation." /><Info icon={<ArrowRight />} title="A clear outcome" text="If we cannot source someone suitable, we tell you clearly. We do not promise availability or invent a match." /></div></section>
-        <section className="content-wrap py-16"><h2 className="text-4xl font-bold tracking-[-.05em]">How SourceTradie helps</h2><p className="mt-5 max-w-3xl leading-7 text-[hsl(var(--muted-foreground))]">You describe the problem and share useful photos once. SourceTradie assesses the likely service, coordinates with a suitable provider and presents confirmed information when available. The provider performs the actual trade or home-service work and remains responsible for their workmanship, licences and insurance.</p><p className="mt-4 max-w-3xl text-sm leading-6 text-[hsl(var(--muted-foreground))]">{page.note}</p><div className="mt-8 flex flex-wrap gap-4"><Link href="/find-a-tradie" className="btn-quiet border">Browse home-service help</Link><Link href="/request" className="btn-accent">Tell us what is wrong</Link></div></section>
+        <section className="content-wrap py-16"><h2 className="text-4xl font-bold tracking-[-.05em]">What to include in your request</h2><p className="mt-5 max-w-3xl leading-7 text-[hsl(var(--muted-foreground))]">{serviceGuidance[location]}</p><h2 className="mt-10 text-2xl font-bold tracking-[-.04em]">How SourceTradie helps</h2><p className="mt-4 max-w-3xl leading-7 text-[hsl(var(--muted-foreground))]">You describe the problem and share useful photos once. SourceTradie assesses the likely service, coordinates with a suitable provider and presents confirmed information when available. The provider performs the actual trade or home-service work and remains responsible for their workmanship, licences and insurance.</p><p className="mt-4 max-w-3xl text-sm leading-6 text-[hsl(var(--muted-foreground))]">{page.note}</p><div className="mt-8 flex flex-wrap gap-4"><Link href="/find-a-tradie" className="btn-quiet border">Browse home-service help</Link><Link href="/request" className="btn-accent">Tell us what is wrong</Link></div></section>
       </main>
     </div>
   );

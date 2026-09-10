@@ -342,9 +342,13 @@ export class SourceTradieRepository {
 
   private async sendNotification(input: {
     jobId: number;
-    dispatchOfferId: number;
-    recipientType: "partner" | "customer";
-    type: "offer_created" | "price_ready" | "customer_confirmed";
+    dispatchOfferId?: number;
+    recipientType: "partner" | "customer" | "admin";
+    type:
+      | "offer_created"
+      | "price_ready"
+      | "customer_confirmed"
+      | "homeowner_request_received";
     idempotencyKey: string;
     to: string | null;
     subject: string;
@@ -384,9 +388,13 @@ export class SourceTradieRepository {
 
   private async persistNotification(input: {
     jobId: number;
-    dispatchOfferId: number;
-    recipientType: "partner" | "customer";
-    type: "offer_created" | "price_ready" | "customer_confirmed";
+    dispatchOfferId?: number;
+    recipientType: "partner" | "customer" | "admin";
+    type:
+      | "offer_created"
+      | "price_ready"
+      | "customer_confirmed"
+      | "homeowner_request_received";
     idempotencyKey: string;
     channel: "email" | "sms";
     to: string | null;
@@ -398,7 +406,7 @@ export class SourceTradieRepository {
       .insert(notificationsTable)
       .values({
         jobId: input.jobId,
-        dispatchOfferId: input.dispatchOfferId,
+        dispatchOfferId: input.dispatchOfferId ?? null,
         recipientType: input.recipientType,
         type: input.type,
         channel: input.channel,
@@ -679,6 +687,230 @@ export class SourceTradieRepository {
       .orderBy(desc(providerOutreachAttemptsTable.createdAt));
   }
 
+  async createCandidateProvider(input: {
+    businessName: string;
+    contactName?: string;
+    trade: string;
+    subServices: string[];
+    phone: string;
+    website?: string;
+    serviceSuburbs: string[];
+    servicePostcodes: string[];
+    normalHours?: string;
+    afterHoursAvailable: boolean;
+    licenceDetails?: string;
+    licenceStatus: string;
+    insuranceStatus: string;
+    source: string;
+    verificationStatus: string;
+    tier: string;
+  }): Promise<
+    | { kind: "invalid_mobile" }
+    | { kind: "ok"; provider: typeof candidateProvidersTable.$inferSelect }
+  > {
+    const normalizedPhone = normalizeAustralianMobile(input.phone);
+    if (!normalizedPhone) return { kind: "invalid_mobile" };
+    const now = new Date();
+    const rows = await this.database
+      .insert(candidateProvidersTable)
+      .values({
+        ...input,
+        contactName: input.contactName ?? null,
+        website: input.website ?? null,
+        normalHours: input.normalHours ?? null,
+        licenceDetails: input.licenceDetails ?? null,
+        normalizedPhone,
+        subServices: uniqueNormalized(input.subServices),
+        serviceSuburbs: uniqueNormalized(input.serviceSuburbs),
+        servicePostcodes: uniqueNormalized(input.servicePostcodes),
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    return { kind: "ok", provider: rows[0]! };
+  }
+
+  async controlCandidateProvider(
+    id: number,
+    input: {
+      action: "mark_dnc" | "clear_dnc" | "set_verification" | "set_tier";
+      reason?: string;
+      verificationStatus?: "candidate" | "checked" | "rejected";
+      tier?: "candidate" | "backup" | "preferred";
+    },
+    actorAuthUserId: string,
+  ) {
+    const now = new Date();
+    const values: Partial<typeof candidateProvidersTable.$inferInsert> = {
+      updatedAt: now,
+    };
+    if (input.action === "mark_dnc") {
+      values.optedOutAt = now;
+      values.optedOutReason = input.reason ?? "operator_marked_do_not_contact";
+      values.outreachStatus = "do_not_contact";
+    } else if (input.action === "clear_dnc") {
+      values.optedOutAt = null;
+      values.optedOutReason = null;
+      values.consentResetAt = now;
+      values.consentResetByAuthUserId = actorAuthUserId;
+      values.consentResetReason = input.reason;
+      values.outreachStatus = "not_contacted";
+    } else if (input.action === "set_verification" && input.verificationStatus) {
+      values.verificationStatus = input.verificationStatus;
+    } else if (input.action === "set_tier" && input.tier) {
+      values.tier = input.tier;
+    } else {
+      return null;
+    }
+    const rows = await this.database
+      .update(candidateProvidersTable)
+      .set(values)
+      .where(eq(candidateProvidersTable.id, id))
+      .returning();
+    return rows[0] ?? null;
+  }
+
+  async updateJobSourcingControl(
+    id: number,
+    input: {
+      paused?: boolean;
+      classificationOverride?: string | null;
+      operatorNote?: string | null;
+    },
+  ) {
+    const rows = await this.database
+      .update(jobsTable)
+      .set({
+        ...(input.paused !== undefined ? { sourcingPaused: input.paused } : {}),
+        ...(input.classificationOverride !== undefined
+          ? { classificationOverride: input.classificationOverride }
+          : {}),
+        ...(input.operatorNote !== undefined
+          ? { sourcingOperatorNote: input.operatorNote }
+          : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(jobsTable.id, id))
+      .returning({
+        id: jobsTable.id,
+        sourcingPaused: jobsTable.sourcingPaused,
+        classificationOverride: jobsTable.classificationOverride,
+        sourcingOperatorNote: jobsTable.sourcingOperatorNote,
+      });
+    return rows[0] ?? null;
+  }
+
+  async queueCandidateOutreach(input: {
+    jobId: number;
+    candidateProviderId: number;
+    timeoutAt: Date;
+    idempotencyKey: string;
+  }): Promise<
+    | { kind: "ok"; attempt: typeof providerOutreachAttemptsTable.$inferSelect }
+    | { kind: "job_unavailable" | "candidate_unavailable" | "active_attempt_exists" }
+  > {
+    const [job] = await this.database
+      .select({ id: jobsTable.id, sourcingPaused: jobsTable.sourcingPaused })
+      .from(jobsTable)
+      .where(eq(jobsTable.id, input.jobId))
+      .limit(1);
+    if (!job || job.sourcingPaused) return { kind: "job_unavailable" };
+    const [candidate] = await this.database
+      .select({
+        id: candidateProvidersTable.id,
+        optedOutAt: candidateProvidersTable.optedOutAt,
+        outreachStatus: candidateProvidersTable.outreachStatus,
+      })
+      .from(candidateProvidersTable)
+      .where(eq(candidateProvidersTable.id, input.candidateProviderId))
+      .limit(1);
+    if (
+      !candidate ||
+      candidate.optedOutAt ||
+      candidate.outreachStatus === "do_not_contact"
+    ) {
+      return { kind: "candidate_unavailable" };
+    }
+    try {
+      const rows = await this.database
+        .insert(providerOutreachAttemptsTable)
+        .values({
+          jobId: input.jobId,
+          candidateProviderId: input.candidateProviderId,
+          status: "queued",
+          idempotencyKey: input.idempotencyKey,
+          timeoutAt: input.timeoutAt,
+        })
+        .onConflictDoNothing({
+          target: providerOutreachAttemptsTable.idempotencyKey,
+        })
+        .returning();
+      if (rows[0]) return { kind: "ok", attempt: rows[0] };
+      return { kind: "active_attempt_exists" };
+    } catch {
+      return { kind: "active_attempt_exists" };
+    }
+  }
+
+  async recordOutreachOutcome(
+    id: number,
+    input: {
+      status:
+        | "declined"
+        | "no_response"
+        | "cancelled"
+        | "accepted"
+        | "needs_human"
+        | "opted_out";
+      responseCode?: string;
+      inboundProviderMessageId?: string;
+    },
+  ): Promise<
+    | { kind: "ok"; attempt: typeof providerOutreachAttemptsTable.$inferSelect }
+    | { kind: "not_found" | "duplicate_or_late_response" }
+  > {
+    const [current] = await this.database
+      .select()
+      .from(providerOutreachAttemptsTable)
+      .where(eq(providerOutreachAttemptsTable.id, id))
+      .limit(1);
+    if (!current) return { kind: "not_found" };
+    if (!["queued", "sent", "awaiting_response"].includes(current.status)) {
+      return { kind: "duplicate_or_late_response" };
+    }
+    try {
+      const rows = await this.database.transaction(async (tx) => {
+        const updated = await tx
+          .update(providerOutreachAttemptsTable)
+          .set({
+            status: input.status,
+            responseCode: input.responseCode ?? null,
+            inboundProviderMessageId: input.inboundProviderMessageId ?? null,
+            updatedAt: new Date(),
+          })
+          .where(eq(providerOutreachAttemptsTable.id, id))
+          .returning();
+        if (input.status === "opted_out" && current.candidateProviderId) {
+          await tx
+            .update(candidateProvidersTable)
+            .set({
+              optedOutAt: new Date(),
+              optedOutReason: "provider_stop_reply",
+              outreachStatus: "do_not_contact",
+              updatedAt: new Date(),
+            })
+            .where(eq(candidateProvidersTable.id, current.candidateProviderId));
+        }
+        return updated;
+      });
+      return rows[0]
+        ? { kind: "ok", attempt: rows[0] }
+        : { kind: "not_found" };
+    } catch {
+      return { kind: "duplicate_or_late_response" };
+    }
+  }
+
   async createJob(input: {
     description: string;
     trade: string;
@@ -694,6 +926,7 @@ export class SourceTradieRepository {
     images?: string[];
   }): Promise<CreatedJobApi> {
     const pricing = matchMelbournePricing(input);
+    const safety = classifySafety(input.description);
     const created = await this.database.transaction(async (tx) => {
       const now = new Date();
       const placeholderReference = `ST-PENDING-${now.getTime()}-${Math.floor(
@@ -724,7 +957,7 @@ export class SourceTradieRepository {
           expectedPriceMaxCents: pricing.maxCents,
           expectedPriceLabel: pricing.customerLabel,
           expectedPriceScope: pricing.scope,
-          status: "awaiting_dispatch",
+          status: safety.interruptFlow ? "reviewing" : "awaiting_dispatch",
           createdAt: now,
           updatedAt: now,
         })
@@ -788,6 +1021,30 @@ export class SourceTradieRepository {
         submissionId: submissionRows[0]!.id,
       };
     });
+    await this.sendNotification({
+      jobId: created.job.id,
+      recipientType: "admin",
+      type: "homeowner_request_received",
+      idempotencyKey: `job:${created.job.id}:operator-alert:email:v1`,
+      to:
+        process.env["PARTNER_OPERATIONS_EMAIL"] ??
+        "partners@sourcetradie.com.au",
+      subject: `${safety.interruptFlow ? "[SAFETY REVIEW] " : ""}New SourceTradie homeowner request · ${created.job.reference} · ${input.urgency}`,
+      text: [
+        "New SourceTradie Homeowner Request",
+        "",
+        `Reference: ${created.job.reference}`,
+        `Urgency: ${input.urgency}`,
+        `Suburb/postcode: ${input.suburb} ${input.postcode}`,
+        `Requested trade: ${input.trade}`,
+        `Safety review required: ${safety.interruptFlow ? "YES" : "No"}`,
+        "",
+        "Review this request promptly in the SourceTradie admin dispatch desk.",
+        "Customer details remain protected and must be used only for fulfilment.",
+        "",
+        "https://sourcetradie.com.au/admin",
+      ].join("\n"),
+    }).catch(() => "failed");
     const assessment = await this.assessSubmission({
       jobId: created.job.id,
       submissionId: created.submissionId,

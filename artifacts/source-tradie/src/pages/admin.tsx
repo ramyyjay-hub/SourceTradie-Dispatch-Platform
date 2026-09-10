@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Activity, ClipboardList, RefreshCw, Send, Users } from "lucide-react";
 import { Link } from "wouter";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   getGetPartnerRecommendationsQueryKey,
@@ -58,6 +58,18 @@ type PartnerAcquisitionSummary = {
   breakdown: PartnerAcquisitionBreakdownRow[];
 };
 
+type CandidateProvider = {
+  id: number;
+  businessName: string;
+  trade: string;
+  phone: string;
+  serviceSuburbs: string[];
+  verificationStatus: string;
+  outreachStatus: string;
+  optedOutAt: string | null;
+  tier: string;
+};
+
 export default function AdminPage() {
   const summary = useGetAdminSummary();
   const jobs = useListJobs();
@@ -74,6 +86,11 @@ export default function AdminPage() {
         "/api/admin/partner-acquisition-summary",
       ),
   });
+  const candidates = useQuery({
+    queryKey: ["admin", "candidate-providers"],
+    queryFn: () =>
+      customFetch<CandidateProvider[]>("/api/admin/candidate-providers"),
+  });
   const [filter, setFilter] = useState("all");
   const visible = useMemo(
     () =>
@@ -88,6 +105,7 @@ export default function AdminPage() {
     partners.refetch();
     applications.refetch();
     acquisitionSummary.refetch();
+    candidates.refetch();
   };
   const nav = (
     <div className="space-y-2">
@@ -151,6 +169,10 @@ export default function AdminPage() {
             />
           </div>
         )}
+        <CandidateProviderPanel
+          candidates={candidates.data ?? []}
+          loading={candidates.isLoading}
+        />
         <section
           className="mt-10"
           aria-labelledby="pending-partner-applications"
@@ -392,6 +414,204 @@ function JobCard({ job }: { job: Job }) {
         jobStatus={job.status}
         assessment={job.assessment ?? undefined}
       />
+      <JobSourcingControls jobId={job.id} />
+    </section>
+  );
+}
+
+function JobSourcingControls({ jobId }: { jobId: number }) {
+  const [paused, setPaused] = useState(false);
+  const [classification, setClassification] = useState("");
+  const [message, setMessage] = useState("");
+  const [candidateId, setCandidateId] = useState("");
+  const candidates = useQuery({
+    queryKey: ["admin", "candidate-providers"],
+    queryFn: () => customFetch<CandidateProvider[]>("/api/admin/candidate-providers"),
+  });
+  const attempts = useQuery({
+    queryKey: ["admin", "provider-outreach-attempts", jobId],
+    queryFn: () =>
+      customFetch<Array<{ id: number; status: string; candidateProviderId: number | null }>>(
+        `/api/admin/provider-outreach-attempts?jobId=${jobId}`,
+      ),
+  });
+  const mutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      customFetch(`/api/admin/jobs/${jobId}/sourcing-control`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => setMessage("Sourcing control saved."),
+    onError: () => setMessage("Control could not be saved."),
+  });
+  const queue = useMutation({
+    mutationFn: () =>
+      customFetch(`/api/admin/jobs/${jobId}/provider-outreach`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          candidateProviderId: Number(candidateId),
+          timeoutAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+          idempotencyKey: `operator:${jobId}:${candidateId}:${crypto.randomUUID()}`,
+        }),
+      }),
+    onSuccess: () => {
+      setMessage("Candidate queued. No message is sent while outreach is disabled.");
+      attempts.refetch();
+    },
+    onError: () => setMessage("Candidate could not be queued. Check pause, DNC and active-attempt state."),
+  });
+  const outcome = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      customFetch(`/api/admin/provider-outreach-attempts/${id}/outcome`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status, responseCode: "operator_recorded" }),
+      }),
+    onSuccess: () => attempts.refetch(),
+  });
+  return (
+    <div className="mt-4 rounded-xl border border-[hsl(var(--border))] p-3 text-xs">
+      <p className="font-semibold">Operator sourcing controls</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          className="btn-quiet border"
+          onClick={() => {
+            mutation.mutate({ paused: !paused });
+            setPaused(!paused);
+          }}
+        >
+          {paused ? "Resume sourcing" : "Pause sourcing"}
+        </button>
+        <input
+          className="field max-w-[240px]"
+          placeholder="Classification override"
+          value={classification}
+          onChange={(event) => setClassification(event.target.value)}
+        />
+        <button
+          className="btn-quiet border"
+          disabled={!classification.trim() || mutation.isPending}
+          onClick={() =>
+            mutation.mutate({ classificationOverride: classification.trim() })
+          }
+        >
+          Save override
+        </button>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-[hsl(var(--border))] pt-3">
+        <select className="field max-w-[280px]" value={candidateId} onChange={(event) => setCandidateId(event.target.value)}>
+          <option value="">Select candidate provider</option>
+          {(candidates.data ?? []).filter((candidate) => !candidate.optedOutAt).map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>{candidate.businessName} · {candidate.trade}</option>
+          ))}
+        </select>
+        <button className="btn-quiet border" disabled={!candidateId || queue.isPending} onClick={() => queue.mutate()}>
+          Queue next candidate
+        </button>
+      </div>
+      {(attempts.data ?? []).map((attempt) => (
+        <div key={attempt.id} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-[hsl(var(--muted)/.55)] px-3 py-2">
+          <span>Attempt #{attempt.id} · candidate #{attempt.candidateProviderId} · {attempt.status}</span>
+          {["queued", "sent", "awaiting_response"].includes(attempt.status) && (
+            <>
+              <button className="font-semibold text-[hsl(var(--secondary))]" onClick={() => outcome.mutate({ id: attempt.id, status: "declined" })}>Skip/declined</button>
+              <button className="font-semibold text-[hsl(var(--secondary))]" onClick={() => outcome.mutate({ id: attempt.id, status: "accepted" })}>Record accepted</button>
+              <button className="font-semibold text-[hsl(var(--secondary))]" onClick={() => outcome.mutate({ id: attempt.id, status: "needs_human" })}>Needs human</button>
+            </>
+          )}
+        </div>
+      ))}
+      {message && <p className="mt-2 text-[hsl(var(--muted-foreground))]">{message}</p>}
+    </div>
+  );
+}
+
+function CandidateProviderPanel({
+  candidates,
+  loading,
+}: {
+  candidates: CandidateProvider[];
+  loading: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({
+    businessName: "",
+    trade: "",
+    phone: "",
+    serviceSuburbs: "",
+    source: "",
+  });
+  const create = useMutation({
+    mutationFn: () =>
+      customFetch("/api/admin/candidate-providers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          businessName: form.businessName,
+          trade: form.trade,
+          phone: form.phone,
+          serviceSuburbs: form.serviceSuburbs.split(",").map((value) => value.trim()).filter(Boolean),
+          servicePostcodes: [],
+          subServices: [],
+          source: form.source,
+          afterHoursAvailable: false,
+          licenceStatus: "not_checked",
+          insuranceStatus: "not_checked",
+          verificationStatus: "candidate",
+          tier: "candidate",
+        }),
+      }),
+    onSuccess: () => {
+      setForm({ businessName: "", trade: "", phone: "", serviceSuburbs: "", source: "" });
+      queryClient.invalidateQueries({ queryKey: ["admin", "candidate-providers"] });
+    },
+  });
+  const markDnc = useMutation({
+    mutationFn: (id: number) =>
+      customFetch(`/api/admin/candidate-providers/${id}/control`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "mark_dnc", reason: "operator_marked" }),
+      }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["admin", "candidate-providers"] }),
+  });
+  return (
+    <section className="mt-10" aria-labelledby="candidate-provider-pool">
+      <SectionLabel>Managed sourcing</SectionLabel>
+      <h2 id="candidate-provider-pool" className="mt-1 text-2xl font-bold">Candidate provider pool</h2>
+      <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">Candidates are not approved partners. Add only publicly advertised business contact details and verify credentials before selection.</p>
+      <div className="mt-4 grid gap-2 rounded-2xl border bg-[hsl(var(--card))] p-4 md:grid-cols-5">
+        {(["businessName", "trade", "phone", "serviceSuburbs", "source"] as const).map((key) => (
+          <input
+            key={key}
+            className="field"
+            placeholder={{ businessName: "Business", trade: "Trade", phone: "Australian mobile", serviceSuburbs: "Suburbs, comma separated", source: "Public source" }[key]}
+            value={form[key]}
+            onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
+          />
+        ))}
+        <button
+          className="btn-accent md:col-span-5 md:w-fit"
+          disabled={create.isPending || Object.values(form).some((value) => !value.trim())}
+          onClick={() => create.mutate()}
+        >
+          Add candidate for verification
+        </button>
+      </div>
+      {loading ? <Skeleton className="mt-4 h-24" /> : (
+        <div className="mt-4 space-y-2">
+          {candidates.map((candidate) => (
+            <div key={candidate.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-[hsl(var(--card))] p-4 text-sm">
+              <div><strong>{candidate.businessName}</strong><p className="text-xs text-[hsl(var(--muted-foreground))]">{candidate.trade} · {candidate.serviceSuburbs.join(", ")} · {candidate.verificationStatus} · {candidate.outreachStatus}</p></div>
+              {!candidate.optedOutAt && <button className="btn-quiet border" onClick={() => markDnc.mutate(candidate.id)}>Mark do not contact</button>}
+            </div>
+          ))}
+          {!candidates.length && <p className="rounded-xl border border-dashed p-4 text-sm text-[hsl(var(--muted-foreground))]">No candidate providers have been added.</p>}
+        </div>
+      )}
     </section>
   );
 }

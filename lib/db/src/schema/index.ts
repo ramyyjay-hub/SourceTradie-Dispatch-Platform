@@ -95,6 +95,9 @@ export const jobsTable = pgTable(
     expectedPriceMaxCents: integer("expected_price_max_cents"),
     expectedPriceLabel: text("expected_price_label"),
     expectedPriceScope: text("expected_price_scope"),
+    sourcingPaused: boolean("sourcing_paused").notNull().default(false),
+    classificationOverride: text("classification_override"),
+    sourcingOperatorNote: text("sourcing_operator_note"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -318,6 +321,7 @@ export const candidateProvidersTable = pgTable(
     trade: text("trade").notNull(),
     subServices: jsonb("sub_services").$type<string[]>().notNull().default([]),
     phone: text("phone").notNull(),
+    normalizedPhone: text("normalized_phone").notNull(),
     website: text("website"),
     serviceSuburbs: jsonb("service_suburbs").$type<string[]>().notNull().default([]),
     servicePostcodes: jsonb("service_postcodes").$type<string[]>().notNull().default([]),
@@ -331,6 +335,10 @@ export const candidateProvidersTable = pgTable(
     outreachStatus: text("outreach_status").notNull().default("not_contacted"),
     lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
     optedOutAt: timestamp("opted_out_at", { withTimezone: true }),
+    optedOutReason: text("opted_out_reason"),
+    consentResetAt: timestamp("consent_reset_at", { withTimezone: true }),
+    consentResetByAuthUserId: uuid("consent_reset_by_auth_user_id"),
+    consentResetReason: text("consent_reset_reason"),
     responseCount: integer("response_count").notNull().default(0),
     acceptanceCount: integer("acceptance_count").notNull().default(0),
     tier: text("tier").notNull().default("candidate"),
@@ -338,7 +346,7 @@ export const candidateProvidersTable = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex("candidate_providers_phone_uidx").on(table.phone),
+    uniqueIndex("candidate_providers_normalized_phone_uidx").on(table.normalizedPhone),
     index("candidate_providers_trade_idx").on(table.trade),
     index("candidate_providers_outreach_idx").on(table.outreachStatus),
   ],
@@ -354,6 +362,7 @@ export const providerOutreachAttemptsTable = pgTable(
     channel: text("channel").notNull().default("sms"),
     status: text("status").notNull().default("queued"),
     providerMessageId: text("provider_message_id"),
+    inboundProviderMessageId: text("inbound_provider_message_id"),
     responseCode: text("response_code"),
     responsePayload: jsonb("response_payload").$type<Record<string, unknown>>(),
     idempotencyKey: text("idempotency_key").notNull(),
@@ -363,6 +372,9 @@ export const providerOutreachAttemptsTable = pgTable(
   },
   (table) => [
     uniqueIndex("provider_outreach_attempts_idempotency_uidx").on(table.idempotencyKey),
+    uniqueIndex("provider_outreach_attempts_inbound_message_uidx")
+      .on(table.inboundProviderMessageId)
+      .where(sql`inbound_provider_message_id IS NOT NULL`),
     uniqueIndex("provider_outreach_one_active_per_job_uidx").on(table.jobId).where(sql`status IN ('queued', 'sent', 'awaiting_response', 'accepted')`),
     index("provider_outreach_attempts_job_idx").on(table.jobId),
   ],

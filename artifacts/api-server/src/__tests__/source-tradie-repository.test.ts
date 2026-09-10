@@ -5,6 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import {
+  candidateProvidersTable,
   dispatchOffersTable,
   jobAiAssessmentsTable,
   jobIntakeSubmissionsTable,
@@ -13,6 +14,7 @@ import {
   notificationsTable,
   partnerFunnelEventsTable,
   partnersTable,
+  providerOutreachAttemptsTable,
 } from "@workspace/db/schema";
 import {
   SourceTradieRepository,
@@ -78,6 +80,10 @@ function buildRepository(
       import.meta.dirname,
       "../../../../lib/db/migrations/0010_partner_acquisition_funnel.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0011_managed_sourcing.sql",
+    ),
   ];
 
   return Promise.all(
@@ -122,6 +128,132 @@ const successfulProvider: JobAiProvider = {
 };
 
 describe("source tradie repository", () => {
+  it("alerts operations immediately and holds hazardous requests for review", async () => {
+    const emails: EmailMessage[] = [];
+    const { repository, db, client } = await buildRepository(undefined, {
+      sendEmail: async (message) => {
+        emails.push(message);
+        return { ok: true, providerMessageId: "operator-alert-1" };
+      },
+    });
+    const job = await repository.createJob({
+      description: "There is a strong gas smell beside the heater",
+      trade: "Not sure",
+      suburb: "Epping",
+      postcode: "3076",
+      urgency: "ASAP",
+      preferredTime: "ASAP",
+      customerName: "Synthetic Customer",
+    });
+    expect(job.status).toBe("reviewing");
+    expect(emails).toHaveLength(1);
+    expect(emails[0]?.subject).toContain("[SAFETY REVIEW]");
+    expect(emails[0]?.text).toContain("Urgency: ASAP");
+    const alertRows = await db
+      .select()
+      .from(notificationsTable)
+      .where(eq(notificationsTable.type, "homeowner_request_received"));
+    expect(alertRows).toHaveLength(1);
+    expect(alertRows[0]?.status).toBe("sent");
+    await client.close();
+  });
+
+  it("enforces sequential candidate outreach, late-reply safety, and durable STOP", async () => {
+    const { repository, db, client } = await buildRepository();
+    const createCandidate = (phone: string, businessName: string) =>
+      repository.createCandidateProvider({
+        businessName,
+        trade: "Plumbing",
+        subServices: ["Blocked drains"],
+        phone,
+        serviceSuburbs: ["Epping"],
+        servicePostcodes: ["3076"],
+        afterHoursAvailable: false,
+        licenceStatus: "checked",
+        insuranceStatus: "checked",
+        source: "synthetic test",
+        verificationStatus: "checked",
+        tier: "candidate",
+      });
+    const firstResult = await createCandidate("0412 345 601", "Synthetic A");
+    const secondResult = await createCandidate("+61 412 345 602", "Synthetic B");
+    expect(firstResult.kind).toBe("ok");
+    expect(secondResult.kind).toBe("ok");
+    if (firstResult.kind !== "ok" || secondResult.kind !== "ok") return;
+    expect(firstResult.provider.normalizedPhone).toBe("+61412345601");
+
+    const job = await repository.createJob({
+      description: "Blocked kitchen drain",
+      trade: "Plumbing",
+      suburb: "Epping",
+      postcode: "3076",
+      urgency: "Today",
+      preferredTime: "Today",
+      customerName: "Synthetic Customer",
+    });
+    const expiry = new Date(Date.now() + 60_000);
+    const first = await repository.queueCandidateOutreach({
+      jobId: job.id,
+      candidateProviderId: firstResult.provider.id,
+      timeoutAt: expiry,
+      idempotencyKey: `test:${job.id}:candidate-a`,
+    });
+    expect(first.kind).toBe("ok");
+    expect(
+      await repository.queueCandidateOutreach({
+        jobId: job.id,
+        candidateProviderId: secondResult.provider.id,
+        timeoutAt: expiry,
+        idempotencyKey: `test:${job.id}:candidate-b-early`,
+      }),
+    ).toMatchObject({ kind: "active_attempt_exists" });
+    if (first.kind !== "ok") return;
+    expect(
+      await repository.recordOutreachOutcome(first.attempt.id, {
+        status: "declined",
+        inboundProviderMessageId: "SM-INBOUND-DECLINE-1",
+      }),
+    ).toMatchObject({ kind: "ok" });
+    const second = await repository.queueCandidateOutreach({
+      jobId: job.id,
+      candidateProviderId: secondResult.provider.id,
+      timeoutAt: expiry,
+      idempotencyKey: `test:${job.id}:candidate-b`,
+    });
+    expect(second.kind).toBe("ok");
+    expect(
+      await repository.recordOutreachOutcome(first.attempt.id, {
+        status: "accepted",
+        inboundProviderMessageId: "SM-INBOUND-LATE-1",
+      }),
+    ).toMatchObject({ kind: "duplicate_or_late_response" });
+    if (second.kind !== "ok") return;
+    expect(
+      await repository.recordOutreachOutcome(second.attempt.id, {
+        status: "opted_out",
+        inboundProviderMessageId: "SM-INBOUND-STOP-1",
+      }),
+    ).toMatchObject({ kind: "ok" });
+    const storedSecond = (
+      await db
+        .select()
+        .from(candidateProvidersTable)
+        .where(eq(candidateProvidersTable.id, secondResult.provider.id))
+    )[0];
+    expect(storedSecond?.outreachStatus).toBe("do_not_contact");
+    expect(storedSecond?.optedOutAt).toBeTruthy();
+    expect(
+      await repository.queueCandidateOutreach({
+        jobId: job.id,
+        candidateProviderId: secondResult.provider.id,
+        timeoutAt: expiry,
+        idempotencyKey: `test:${job.id}:candidate-b-after-stop`,
+      }),
+    ).toMatchObject({ kind: "candidate_unavailable" });
+    expect(await db.select().from(providerOutreachAttemptsTable)).toHaveLength(2);
+    await client.close();
+  });
+
   it("creates jobs with stable references and history records", async () => {
     const { repository, db, client } =
       await buildRepository(successfulProvider);
@@ -542,8 +674,11 @@ describe("source tradie repository", () => {
     expect(created.kind).toBe("ok");
     if (created.kind !== "ok") return;
     expect(created.notificationStatus).toBe("sent");
-    expect(sent[0]?.text).not.toContain("Secret Street");
-    expect(sent[0]?.text).not.toContain("0400999999");
+    const offerEmail = sent.find((message) =>
+      message.subject.startsWith("SourceTradie opportunity"),
+    );
+    expect(offerEmail?.text).not.toContain("Secret Street");
+    expect(offerEmail?.text).not.toContain("0400999999");
     const pending = await repository.listPartnerOffers(first.id);
     expect(pending[0].job.serviceAddressLine1).toBeNull();
     expect(pending[0].job.customerPhone).toBeNull();
@@ -580,7 +715,7 @@ describe("source tradie repository", () => {
       confirmedPriceCents: 22_000,
       customerConfirmed: false,
     });
-    expect(sent).toHaveLength(2);
+    expect(sent).toHaveLength(3);
     expect(
       (await repository.confirmDispatch(job.id, "0".repeat(64))).kind,
     ).toBe("not_found");
@@ -610,8 +745,8 @@ describe("source tradie repository", () => {
       23_000,
     );
     expect(duplicate.kind).toBe("invalid_transition");
-    expect(sent).toHaveLength(4);
-    expect(await db.select().from(notificationsTable)).toHaveLength(5);
+    expect(sent).toHaveLength(5);
+    expect(await db.select().from(notificationsTable)).toHaveLength(6);
     await client.close();
   });
 
@@ -750,7 +885,11 @@ describe("source tradie repository", () => {
       /Jane|0400999999|Secret Street|blocked toilet/i,
     );
     expect(smsMessages[0]?.body.length).toBeLessThanOrEqual(160);
-    expect(emails[0]?.text).toContain(
+    expect(
+      emails.find((message) =>
+        message.subject.startsWith("SourceTradie opportunity"),
+      )?.text,
+    ).toContain(
       "https://sourcetradie.com.au/partner/dashboard",
     );
 
@@ -764,7 +903,7 @@ describe("source tradie repository", () => {
     expect(smsMessages).toHaveLength(1);
     const rows = await db.select().from(notificationsTable);
     expect(rows.filter((row) => row.channel === "sms")).toHaveLength(1);
-    expect(rows.filter((row) => row.channel === "email")).toHaveLength(1);
+    expect(rows.filter((row) => row.channel === "email")).toHaveLength(2);
     await client.close();
   });
 

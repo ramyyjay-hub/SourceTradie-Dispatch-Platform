@@ -38,6 +38,7 @@ async function createTestApi(
     "0008_partner_application_acknowledgement.sql",
     "0009_partner_offer_sms.sql",
     "0010_partner_acquisition_funnel.sql",
+    "0011_managed_sourcing.sql",
   ].map((file) =>
     path.resolve(import.meta.dirname, "../../../../lib/db/migrations", file),
   );
