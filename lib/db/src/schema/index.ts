@@ -409,6 +409,14 @@ export const candidateProvidersTable = pgTable(
   {
     id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
     businessName: text("business_name").notNull(),
+    /**
+     * Lowercased, punctuation/whitespace-stripped form of businessName, used
+     * ONLY as the identity key (see the unique index below) so that casing
+     * or punctuation differences ("Solus Plumbing" vs "solus  plumbing")
+     * can't create a duplicate identity on a future re-import. Never shown
+     * to a user -- businessName remains the display value.
+     */
+    normalizedBusinessName: text("normalized_business_name").notNull(),
     /** Other registered/trading names this same identity operates under (e.g. ABN-verified trading names). */
     tradingNames: jsonb("trading_names").$type<string[]>().notNull().default([]),
     contactName: text("contact_name"),
@@ -446,7 +454,15 @@ export const candidateProvidersTable = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex("candidate_providers_normalized_phone_uidx").on(table.normalizedPhone),
+    // Identity key: a shared phone number alone is not sufficient evidence that
+    // two differently-named businesses are the same legal/operating entity
+    // (e.g. two distinct trading names sharing one office phone line). The
+    // pair (normalized_business_name, normalized_phone) is what must stay
+    // unique so re-running an import can't create duplicate rows for the
+    // same identity -- normalized (not raw business_name) so casing/
+    // punctuation differences in a re-sourced name can't slip past it.
+    uniqueIndex("candidate_providers_name_phone_uidx").on(table.normalizedBusinessName, table.normalizedPhone),
+    index("candidate_providers_normalized_phone_idx").on(table.normalizedPhone),
     index("candidate_providers_trade_idx").on(table.trade),
     index("candidate_providers_outreach_idx").on(table.outreachStatus),
     index("candidate_providers_contact_eligibility_idx").on(table.contactEligibility),

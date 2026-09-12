@@ -30,12 +30,21 @@ const MELBOURNE_LAUNCH_ZONES = ["North", "West", "East", "South-East", "Bayside/
 // normalized business names a dedup cluster contains; when a cluster's
 // name set matches, the canonical identity and trading-name-per-capability
 // mapping below are used instead of the generic "first row wins" rule.
-const VERIFIED_IDENTITY_OVERRIDES = [
+// Currently empty: a shared phone number alone is not sufficient identity
+// evidence when public business names materially differ, so nothing is
+// auto-merged across different names without an entry here.
+const VERIFIED_IDENTITY_OVERRIDES = [];
+
+// Externally-verified facts about a relationship between two DIFFERENT
+// provider identities that we deliberately do NOT merge (different public
+// business names, so each keeps its own opt-outs/response history/licence
+// checks/pricing). Purely an annotation carried into the generated SQL as a
+// comment and into the console report -- never written to a database column,
+// and never used by the dedup/clustering logic above.
+const RELATED_IDENTITY_NOTES = [
   {
-    matchNames: new Set(["Solus Plumbing", "Solus Locksmith"]),
-    canonicalName: "Cloud Flow Pty Ltd",
-    tradingNameByTrade: { Plumbing: "Solus Plumbing", Locksmith: "Solus Locksmith" },
-    note: "ABN 49 154 223 980 -- Solus Plumbing and Solus Locksmith are both current registered trading names of Cloud Flow Pty Ltd (registered 29 May 2026).",
+    names: new Set(["Solus Plumbing", "Solus Locksmith"]),
+    note: "ABN 49 154 223 980 -- Solus Plumbing and Solus Locksmith are both current registered trading names of Cloud Flow Pty Ltd (registered 29 May 2026), and share a phone number. Kept as SEPARATE provider identities: different public business names are not auto-merged on a shared phone alone. Flagged here only for a future explicit, manual identity-merge decision if ever needed.",
   },
 ];
 
@@ -173,14 +182,28 @@ class UnionFind {
   union(i, j) { const ri = this.find(i), rj = this.find(j); if (ri !== rj) this.parent[ri] = rj; }
 }
 
+// Phone/domain overlap is corroborating evidence, not sufficient on its own:
+// different public business names must remain separate provider identities
+// unless we independently confirm they're the same operating/legal business
+// (see VERIFIED_IDENTITY_OVERRIDES). So a shared phone or website domain only
+// unions two rows when they also share a normalized business name; it is
+// never enough by itself to merge two differently-named businesses.
 const uf = new UnionFind(candidates.length);
 const phoneIndex = new Map(), domainIndex = new Map(), nameIndex = new Map();
 candidates.forEach((row, i) => {
   const phoneKey = normalizePhoneDigits(row.phone);
   const domainKey = domainOf(row.website);
   const nameKey = normalizeName(row.businessName);
-  if (phoneKey) { if (phoneIndex.has(phoneKey)) uf.union(i, phoneIndex.get(phoneKey)); else phoneIndex.set(phoneKey, i); }
-  if (domainKey) { if (domainIndex.has(domainKey)) uf.union(i, domainIndex.get(domainKey)); else domainIndex.set(domainKey, i); }
+  if (phoneKey) {
+    const sameKeyRows = phoneIndex.get(phoneKey) ?? [];
+    for (const j of sameKeyRows) if (normalizeName(candidates[j].businessName) === nameKey) uf.union(i, j);
+    phoneIndex.set(phoneKey, [...sameKeyRows, i]);
+  }
+  if (domainKey) {
+    const sameKeyRows = domainIndex.get(domainKey) ?? [];
+    for (const j of sameKeyRows) if (normalizeName(candidates[j].businessName) === nameKey) uf.union(i, j);
+    domainIndex.set(domainKey, [...sameKeyRows, i]);
+  }
   if (nameKey) {
     const sameNameRows = nameIndex.get(nameKey) ?? [];
     for (const j of sameNameRows) if (row.zones.some((z) => candidates[j].zones.includes(z))) uf.union(i, j);
@@ -218,11 +241,17 @@ for (const group of clusters.values()) {
     ? [...namesInGroup]
     : [...namesInGroup].filter((n) => n !== primary.businessName);
   const tradingNameByTrade = override ? override.tradingNameByTrade : {};
+  const relatedNote = RELATED_IDENTITY_NOTES.find((r) => r.names.has(businessName))?.note ?? null;
 
   merged.push({
     businessName,
+    // Identity key component: casing/punctuation-insensitive so a future
+    // re-sourced name ("Solus Plumbing" vs "solus  plumbing") can't slip
+    // past the DB's uniqueness guarantee and create a duplicate identity.
+    normalizedBusinessName: normalizeName(businessName),
     tradingNames,
     verifiedNote: override?.note ?? null,
+    relatedNote,
     capabilities,
     tradingNameByTrade,
     sourceUrlByTrade,
@@ -250,21 +279,27 @@ function providerBlock(p) {
         `(${sqlString(trade)}, ${sqlString(p.tradingNameByTrade[trade] ?? null)}, ${sqlString(p.sourceUrlByTrade[trade] ?? p.sourceUrl)})`,
     )
     .join(",\n    ");
-  return `WITH upsert AS (
+  // This is generation-time documentation only, NOT identity evidence stored
+  // in Production: candidate_providers has no column for "this identity is
+  // externally related to that other identity", and adding one is out of
+  // scope for tonight's import. The ABN cross-reference itself remains
+  // authoritative in the source workbook / source URL, not in the database.
+  const noteComment = p.relatedNote ? `-- ${p.relatedNote}\n` : "";
+  return `${noteComment}WITH upsert AS (
   INSERT INTO candidate_providers (
-    business_name, trading_names, trade, sub_services, phone, normalized_phone,
+    business_name, normalized_business_name, trading_names, trade, sub_services, phone, normalized_phone,
     website, service_suburbs, service_postcodes, after_hours_available,
     licence_details, licence_status, insurance_status, source, source_url,
     verification_status, contact_eligibility, outreach_status, tier
   ) VALUES (
-    ${sqlString(p.businessName)}, ${sqlJsonbArray(p.tradingNames)}, ${sqlString(p.capabilities[0])}, '[]'::jsonb,
+    ${sqlString(p.businessName)}, ${sqlString(p.normalizedBusinessName)}, ${sqlJsonbArray(p.tradingNames)}, ${sqlString(p.capabilities[0])}, '[]'::jsonb,
     ${sqlString(p.phone)}, ${sqlString(normalizeAustralianPhone(p.phone))},
     ${sqlString(p.website)}, ${sqlJsonbArray(p.zones)}, '[]'::jsonb, ${p.afterHoursAvailable},
     ${sqlString(p.licenceDetails)}, 'not_checked', 'not_checked',
     'public_discovery', ${sqlString(p.sourceUrl)},
     'unverified', 'manual_only', 'not_contacted', 'candidate'
   )
-  ON CONFLICT (normalized_phone) DO UPDATE SET updated_at = now()
+  ON CONFLICT (normalized_business_name, normalized_phone) DO UPDATE SET updated_at = now()
   RETURNING id
 )
 INSERT INTO candidate_provider_trades (candidate_provider_id, trade, trading_name, source_url)
@@ -280,9 +315,15 @@ const fullSql = `-- SourceTradie candidate provider seed import
 -- ${merged.length} provider identities, ${totalCapabilityRows} capability rows
 -- Every record: source=public_discovery, verification_status=unverified,
 -- contact_eligibility=manual_only. No outreach is triggered by this script.
--- Idempotent: normalized_phone is unique, so re-running updates existing
--- identities in place (ON CONFLICT DO UPDATE) rather than duplicating them,
--- and capability rows are ON CONFLICT DO NOTHING per (provider, trade).
+-- Idempotent: (normalized_business_name, normalized_phone) is unique, so
+-- re-running updates existing identities in place (ON CONFLICT DO UPDATE)
+-- rather than duplicating them, and capability rows are ON CONFLICT DO
+-- NOTHING per (provider, trade). Normalized (not raw) business name so a
+-- future re-sourced name that only differs in casing/punctuation can't slip
+-- past this and create a duplicate identity. This also allows two
+-- differently-named businesses to share one phone number as separate
+-- identities -- a shared phone alone is not sufficient evidence they're the
+-- same operating/legal business.
 BEGIN;
 
 ${sqlBlocks.join("\n\n")}
@@ -360,36 +401,54 @@ console.log(`First apply: ${afterFirstRun.providers} providers, ${afterFirstRun.
 console.log(`Second apply (identical SQL, re-run): ${afterSecondRun.providers} providers, ${afterSecondRun.capabilities} capability rows`);
 console.log(`Idempotent re-run test: ${idempotentPass ? "PASS" : "FAIL"}`);
 
+// -- Prove the identity key is case/punctuation-insensitive: a re-sourced
+// name that differs only in casing/whitespace from an already-imported
+// provider must resolve to the SAME identity (via normalized_business_name),
+// not create a duplicate row.
+const [caseVariantProvider] = merged;
+const caseVariantName = `  ${caseVariantProvider.businessName.toUpperCase()}  `;
+await idemClient.exec(
+  `INSERT INTO candidate_providers (
+    business_name, normalized_business_name, trade, phone, normalized_phone,
+    source, verification_status, contact_eligibility, outreach_status
+  ) VALUES (
+    ${sqlString(caseVariantName)}, ${sqlString(normalizeName(caseVariantName))}, ${sqlString(caseVariantProvider.capabilities[0])},
+    ${sqlString(caseVariantProvider.phone)}, ${sqlString(normalizeAustralianPhone(caseVariantProvider.phone))},
+    'public_discovery', 'unverified', 'manual_only', 'not_contacted'
+  )
+  ON CONFLICT (normalized_business_name, normalized_phone) DO UPDATE SET updated_at = now();`,
+);
+const afterCaseVariantInsert = await counts(idemClient);
+const caseInsensitiveIdentityPass = afterCaseVariantInsert.providers === afterSecondRun.providers;
+console.log(
+  `Case/punctuation-insensitive identity key test (re-inserting "${caseVariantName.trim()}" against existing "${caseVariantProvider.businessName}"): ${caseInsensitiveIdentityPass ? "PASS" : "FAIL"} (${afterSecondRun.providers} -> ${afterCaseVariantInsert.providers} providers)`,
+);
+
 // -- Prove the multi-trade discovery + no-duplicate-outreach-eligibility
 // claim against this exact imported data (not a synthetic stand-in).
 const lexity = await idemClient.query(
   "select cp.id, string_agg(cpt.trade, ', ') as trades from candidate_providers cp join candidate_provider_trades cpt on cpt.candidate_provider_id = cp.id where cp.business_name = 'Lexity' group by cp.id",
 );
-const cloudFlow = await idemClient.query(
-  "select cp.id, cp.business_name, cp.trading_names, string_agg(cpt.trade, ', ') as trades from candidate_providers cp join candidate_provider_trades cpt on cpt.candidate_provider_id = cp.id where cp.business_name = 'Cloud Flow Pty Ltd' group by cp.id, cp.business_name, cp.trading_names",
-);
 console.log(`\nLexity in imported data: ${JSON.stringify(lexity.rows)}`);
-console.log(`Cloud Flow (Solus) in imported data: ${JSON.stringify(cloudFlow.rows)}`);
+const lexityMergedPass = lexity.rows.length === 1 && lexity.rows[0].trades.split(", ").length > 1;
+console.log(`Lexity merged as ONE multi-trade identity: ${lexityMergedPass ? "PASS" : "FAIL"}`);
 
-// -- Prove per-capability source_url provenance: Cloud Flow's two trades
-// must carry DISTINCT source URLs (they were sourced from different listing
-// pages); the provider-level source_url must stay the general/canonical one.
-const cloudFlowCapabilities = await idemClient.query(
-  "select cpt.trade, cpt.trading_name, cpt.source_url from candidate_provider_trades cpt join candidate_providers cp on cp.id = cpt.candidate_provider_id where cp.business_name = 'Cloud Flow Pty Ltd' order by cpt.trade",
+// -- Prove the Solus split: two DIFFERENTLY-NAMED businesses sharing a phone
+// number must land as TWO SEPARATE provider identities, not merged, even
+// though they're externally confirmed (ABN Lookup) to share a legal owner.
+const solus = await idemClient.query(
+  "select cp.id, cp.business_name, cp.normalized_phone, string_agg(cpt.trade, ', ') as trades from candidate_providers cp join candidate_provider_trades cpt on cpt.candidate_provider_id = cp.id where cp.business_name in ('Solus Plumbing', 'Solus Locksmith') group by cp.id, cp.business_name, cp.normalized_phone order by cp.business_name",
 );
-const cloudFlowProvider = await idemClient.query(
-  "select source_url from candidate_providers where business_name = 'Cloud Flow Pty Ltd'",
-);
-const plumbingCap = cloudFlowCapabilities.rows.find((r) => r.trade === "Plumbing");
-const locksmithCap = cloudFlowCapabilities.rows.find((r) => r.trade === "Locksmith");
-const distinctUrlsPass =
-  plumbingCap?.source_url &&
-  locksmithCap?.source_url &&
-  plumbingCap.source_url !== locksmithCap.source_url &&
-  cloudFlowProvider.rows[0]?.source_url === plumbingCap.source_url; // provider-level = primary row's URL
-console.log(`\nCloud Flow capability-level source URLs: ${JSON.stringify(cloudFlowCapabilities.rows)}`);
-console.log(`Cloud Flow provider-level (canonical) source URL: ${cloudFlowProvider.rows[0]?.source_url}`);
-console.log(`Distinct per-capability source_url test (Cloud Flow Plumbing vs Locksmith): ${distinctUrlsPass ? "PASS" : "FAIL"}`);
+console.log(`\nSolus in imported data: ${JSON.stringify(solus.rows)}`);
+const solusPlumbing = solus.rows.find((r) => r.business_name === "Solus Plumbing");
+const solusLocksmith = solus.rows.find((r) => r.business_name === "Solus Locksmith");
+const solusSplitPass =
+  solus.rows.length === 2 &&
+  solusPlumbing?.id !== solusLocksmith?.id &&
+  solusPlumbing?.normalized_phone === solusLocksmith?.normalized_phone &&
+  solusPlumbing?.trades === "Plumbing" &&
+  solusLocksmith?.trades === "Locksmith";
+console.log(`Solus Plumbing and Solus Locksmith remain SEPARATE identities (same phone): ${solusSplitPass ? "PASS" : "FAIL"}`);
 
 const bgmCapabilities = await idemClient.query(
   "select cpt.trade, cpt.source_url from candidate_provider_trades cpt join candidate_providers cp on cp.id = cpt.candidate_provider_id where cp.business_name = 'BGM Services' order by cpt.trade",
@@ -416,7 +475,9 @@ console.log(`REJECTED: ${rejected.length}`);
 for (const r of rejected) console.log(`  row ${r.row} (${r.business || "unnamed"}): ${r.reasons.join(", ")}`);
 console.log(`MULTI-TRADE PROVIDERS: ${multiTradeProviders.length}`);
 for (const p of multiTradeProviders) console.log(`  "${p.businessName}"${p.tradingNames.length ? ` (aka ${p.tradingNames.join(", ")})` : ""}: ${p.capabilities.join(", ")}`);
-console.log(`DISTINCT PER-CAPABILITY SOURCE URL (Cloud Flow): ${distinctUrlsPass ? "PASS" : "FAIL"}`);
+console.log(`LEXITY MERGED AS ONE MULTI-TRADE IDENTITY: ${lexityMergedPass ? "PASS" : "FAIL"}`);
+console.log(`SOLUS PLUMBING / SOLUS LOCKSMITH REMAIN SEPARATE IDENTITIES: ${solusSplitPass ? "PASS" : "FAIL"}`);
+console.log(`CASE/PUNCTUATION-INSENSITIVE IDENTITY KEY: ${caseInsensitiveIdentityPass ? "PASS" : "FAIL"}`);
 console.log(`DISTINCT PER-CAPABILITY SOURCE URL (BGM Services): ${bgmDistinctPass ? "PASS" : "FAIL"}`);
 console.log(`CONTACT ELIGIBILITY: 100% manual_only (hard-coded in the generated SQL, not derived from source data)`);
 console.log(`VERIFICATION: 100% unverified (hard-coded)`);

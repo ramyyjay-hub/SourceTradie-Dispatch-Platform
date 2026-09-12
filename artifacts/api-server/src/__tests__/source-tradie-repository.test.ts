@@ -103,6 +103,7 @@ function buildRepository(
     path.resolve(
       import.meta.dirname,
       "../../../../lib/db/migrations/0016_candidate_trade_source_url.sql",
+      "../../../../lib/db/migrations/0017_candidate_identity_key_by_name_phone.sql",
     ),
   ];
 
