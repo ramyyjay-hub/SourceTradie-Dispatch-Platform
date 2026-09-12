@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import {
+  candidateProviderTradesTable,
   candidateProvidersTable,
   jobPaymentEventsTable,
   jobPaymentsTable,
@@ -34,6 +35,7 @@ const MIGRATION_FILES = [
   "0011_managed_sourcing.sql",
   "0012_paid_dispatch_foundation.sql",
   "0013_candidate_contact_eligibility.sql",
+  "0014_candidate_provider_trades.sql",
 ];
 
 /**
@@ -327,6 +329,34 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
     });
     expect(checkout.ok).toBe(false);
     if (!checkout.ok) expect(checkout.errorCode).toContain("not_serviceable");
+  });
+
+  it("finds a multi-trade candidate for a job under a trade that isn't its legacy single trade column", async () => {
+    const { repository, testDb, insertJob } = await buildHarness();
+
+    const [lexity] = await testDb
+      .insert(candidateProvidersTable)
+      .values({
+        businessName: "Lexity",
+        trade: "Electrical", // legacy column deliberately does NOT say Heating & Cooling
+        subServices: [],
+        phone: "1300993447",
+        normalizedPhone: "+611300993447",
+        serviceSuburbs: ["Richmond"],
+        servicePostcodes: ["3121"],
+        source: "test-seed",
+      })
+      .returning();
+    await testDb.insert(candidateProviderTradesTable).values([
+      { candidateProviderId: lexity!.id, trade: "Electrical" },
+      { candidateProviderId: lexity!.id, trade: "Heating & Cooling" },
+    ]);
+
+    const job = await insertJob({ trade: "Heating & Cooling" });
+    const serviceability = await repository.runServiceabilityCheck(job.id);
+
+    expect(serviceability?.outcome).toBe("serviceable");
+    expect(serviceability?.candidateCount).toBeGreaterThan(0);
   });
 });
 

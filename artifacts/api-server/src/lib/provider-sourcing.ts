@@ -2,7 +2,16 @@ export type SourcingReply = "accepted" | "declined" | "opted_out" | "ambiguous";
 
 export type CandidateForRanking = {
   id: number;
+  /** Legacy single-trade column, kept for display/backward compatibility. */
   trade: string;
+  /**
+   * Every top-level trade this provider identity is discoverable under
+   * (from candidate_provider_trades, falling back to [trade] if the
+   * provider has no capability rows yet). Trade qualification is scored
+   * against this, not the single `trade` field, so a provider covering
+   * multiple trades is found by every job trade it genuinely services.
+   */
+  trades: string[];
   subServices: string[];
   serviceSuburbs: string[];
   servicePostcodes: string[];
@@ -40,7 +49,7 @@ export function rankCandidates(job: SourcingJob, candidates: CandidateForRanking
     .map((candidate) => {
       let score = 0;
       const reasons: string[] = [];
-      if (same(candidate.trade, job.trade)) { score += 40; reasons.push("trade match"); }
+      if (candidate.trades.some((trade) => same(trade, job.trade))) { score += 40; reasons.push("trade match"); }
       if (job.subtype && candidate.subServices.some((service) => same(service, job.subtype!))) { score += 15; reasons.push("sub-service match"); }
       if (candidate.servicePostcodes.includes(job.postcode)) { score += 25; reasons.push("postcode coverage"); }
       else if (candidate.serviceSuburbs.some((suburb) => same(suburb, job.suburb))) { score += 20; reasons.push("suburb coverage"); }

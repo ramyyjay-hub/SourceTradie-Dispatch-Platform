@@ -451,6 +451,36 @@ export const candidateProvidersTable = pgTable(
   ],
 );
 
+/**
+ * One row per top-level trade a candidate provider genuinely services.
+ * Lets ranking discover the same provider identity under every trade it
+ * covers (e.g. an electrician who also does heating & cooling), without
+ * duplicating the provider or creating a second outreach-able entity --
+ * outreach and DNC/opt-out state always key off candidateProviderId, never
+ * off a row in this table. The legacy single `trade` column on
+ * candidate_providers is kept for backward compatibility; this table is
+ * additive alongside it, not a replacement.
+ */
+export const candidateProviderTradesTable = pgTable(
+  "candidate_provider_trades",
+  {
+    id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+    candidateProviderId: integer("candidate_provider_id")
+      .notNull()
+      .references(() => candidateProvidersTable.id, { onDelete: "cascade" }),
+    trade: text("trade").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("candidate_provider_trades_provider_trade_uidx").on(
+      table.candidateProviderId,
+      table.trade,
+    ),
+    index("candidate_provider_trades_trade_idx").on(table.trade),
+    index("candidate_provider_trades_provider_id_idx").on(table.candidateProviderId),
+  ],
+);
+
 export const providerOutreachAttemptsTable = pgTable(
   "provider_outreach_attempts",
   {

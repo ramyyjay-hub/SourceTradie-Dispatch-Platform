@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type Stripe from "stripe";
 import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import {
+  candidateProviderTradesTable,
   candidateProvidersTable,
   jobPaymentEventsTable,
   jobPaymentsTable,
@@ -91,6 +92,27 @@ export class PaidDispatchRepository {
       .from(candidateProvidersTable)
       .where(isNull(candidateProvidersTable.optedOutAt));
 
+    const capabilityRows = candidateRows.length
+      ? await this.database
+          .select({
+            candidateProviderId: candidateProviderTradesTable.candidateProviderId,
+            trade: candidateProviderTradesTable.trade,
+          })
+          .from(candidateProviderTradesTable)
+          .where(
+            inArray(
+              candidateProviderTradesTable.candidateProviderId,
+              candidateRows.map((row) => row.id),
+            ),
+          )
+      : [];
+    const capabilitiesByProviderId = new Map<number, string[]>();
+    for (const row of capabilityRows) {
+      const existing = capabilitiesByProviderId.get(row.candidateProviderId) ?? [];
+      existing.push(row.trade);
+      capabilitiesByProviderId.set(row.candidateProviderId, existing);
+    }
+
     const result = assessServiceability({
       trade: job.trade,
       description: job.description,
@@ -100,6 +122,7 @@ export class PaidDispatchRepository {
       candidates: candidateRows.map((row) => ({
         id: row.id,
         trade: row.trade,
+        trades: capabilitiesByProviderId.get(row.id) ?? [row.trade],
         subServices: row.subServices,
         serviceSuburbs: row.serviceSuburbs,
         servicePostcodes: row.servicePostcodes,
