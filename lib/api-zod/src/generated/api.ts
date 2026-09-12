@@ -633,6 +633,9 @@ export const RunServiceabilityCheckResponse = zod.object({
   "outcome": zod.enum(['serviceable', 'manual_review', 'unsupported']),
   "inferredTrade": zod.string(),
   "candidateCount": zod.number(),
+  "rawCandidateCount": zod.number(),
+  "verifiedCandidateCount": zod.number(),
+  "dispatchReadyCount": zod.number(),
   "reason": zod.string()
 })
 

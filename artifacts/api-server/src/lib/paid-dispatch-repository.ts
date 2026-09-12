@@ -10,7 +10,7 @@ import {
   notificationsTable,
 } from "@workspace/db/schema";
 import type { db as WorkspaceDb } from "@workspace/db";
-import { assessServiceability, type ServiceabilityOutcome } from "./serviceability";
+import { assessServiceability, type ServiceabilityResult } from "./serviceability";
 import {
   createPaymentProvider,
   SOURCING_FEE_AMOUNT_CENTS,
@@ -23,12 +23,7 @@ import {
 
 type DbLike = typeof WorkspaceDb;
 
-export type ServiceabilityCheckResult = {
-  outcome: ServiceabilityOutcome;
-  inferredTrade: string;
-  candidateCount: number;
-  reason: string;
-};
+export type ServiceabilityCheckResult = ServiceabilityResult;
 
 export type CheckoutStartResult =
   | { ok: true; checkoutUrl: string; testMode: boolean }

@@ -1389,13 +1389,34 @@ components:
 
     ServiceabilityCheckResult:
       type: object
-      required: [outcome, inferredTrade, candidateCount, reason]
+      required:
+        [
+          outcome,
+          inferredTrade,
+          candidateCount,
+          rawCandidateCount,
+          verifiedCandidateCount,
+          dispatchReadyCount,
+          reason,
+        ]
       properties:
         outcome:
           type: string
           enum: [serviceable, manual_review, unsupported]
         inferredTrade: { type: string }
+        # Deprecated alias of rawCandidateCount, kept for existing consumers.
         candidateCount: { type: number }
+        # Every candidate that qualifies on trade + coverage, regardless of
+        # verification status -- this is "we could plausibly source from
+        # someone", not "we are ready to charge for it".
+        rawCandidateCount: { type: number }
+        # Subset of rawCandidateCount whose listing has been checked
+        # (verification_status listing_verified/dispatch_eligible/checked).
+        verifiedCandidateCount: { type: number }
+        # Subset of verifiedCandidateCount considered ready to actually
+        # dispatch a paid job to. outcome can only be "serviceable" when
+        # this is greater than zero.
+        dispatchReadyCount: { type: number }
         reason: { type: string }
 
     CheckoutInput:

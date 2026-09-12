@@ -597,6 +597,9 @@ export interface ServiceabilityCheckResult {
   outcome: ServiceabilityCheckResultOutcome;
   inferredTrade: string;
   candidateCount: number;
+  rawCandidateCount: number;
+  verifiedCandidateCount: number;
+  dispatchReadyCount: number;
   reason: string;
 }
 

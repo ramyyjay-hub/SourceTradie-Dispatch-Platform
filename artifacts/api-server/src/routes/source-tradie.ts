@@ -30,6 +30,7 @@ import {
   type JobPhotoStorage,
 } from "../lib/job-photo-storage";
 import { PaidDispatchRepository } from "../lib/paid-dispatch-repository";
+import { VERIFICATION_STATUS_VALUES } from "../lib/serviceability";
 
 type DbLike = typeof WorkspaceDb;
 
@@ -131,7 +132,7 @@ const CandidateProviderBody = z
     licenceStatus: z.enum(["not_checked", "checked", "restricted", "expired"]),
     insuranceStatus: z.enum(["not_checked", "checked", "missing", "expired"]),
     source: z.string().trim().min(2).max(200),
-    verificationStatus: z.enum(["candidate", "checked", "rejected"]),
+    verificationStatus: z.enum(VERIFICATION_STATUS_VALUES),
     tier: z.enum(["candidate", "backup", "preferred"]),
   })
   .strict();
@@ -139,7 +140,7 @@ const CandidateProviderControlBody = z
   .object({
     action: z.enum(["mark_dnc", "clear_dnc", "set_verification", "set_tier"]),
     reason: z.string().trim().min(3).max(500).optional(),
-    verificationStatus: z.enum(["candidate", "checked", "rejected"]).optional(),
+    verificationStatus: z.enum(VERIFICATION_STATUS_VALUES).optional(),
     tier: z.enum(["candidate", "backup", "preferred"]).optional(),
   })
   .strict();

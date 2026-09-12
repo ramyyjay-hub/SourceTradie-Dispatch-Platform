@@ -18,6 +18,12 @@ import type {
   RefundResult,
 } from "../lib/stripe-provider";
 import { StripePaymentProvider } from "../lib/stripe-provider";
+
+// Mirrors normalizeName() in scripts/generate-candidate-import-sql.mjs --
+// the DB's identity-key uniqueness is case/punctuation-insensitive.
+function normalizeBusinessName(raw: string) {
+  return raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
 import type { EmailMessage, NotificationProvider } from "../lib/notification-provider";
 
 const MIGRATION_FILES = [
@@ -38,6 +44,7 @@ const MIGRATION_FILES = [
   "0014_candidate_provider_trades.sql",
   "0015_candidate_trading_names.sql",
   "0016_candidate_trade_source_url.sql",
+  "0017_candidate_identity_key_by_name_phone.sql",
 ];
 
 /**
@@ -115,8 +122,13 @@ async function buildHarness() {
   );
   const testDb = drizzle(client);
 
+  // dispatch_eligible: this harness backs the full paid-checkout/refund flow
+  // tests, which need a candidate serviceability actually considers charge-
+  // worthy -- a freshly-imported unverified public listing is not enough
+  // (see the dedicated "does not treat a pile of unverified..." test below).
   await testDb.insert(candidateProvidersTable).values({
     businessName: "Test Plumbing Co",
+    normalizedBusinessName: normalizeBusinessName("Test Plumbing Co"),
     trade: "Plumbing",
     subServices: [],
     phone: "0400000111",
@@ -124,6 +136,7 @@ async function buildHarness() {
     serviceSuburbs: ["Richmond"],
     servicePostcodes: ["3121"],
     source: "test-seed",
+    verificationStatus: "dispatch_eligible",
   });
 
   const emails: EmailMessage[] = [];
@@ -333,6 +346,83 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
     if (!checkout.ok) expect(checkout.errorCode).toContain("not_serviceable");
   });
 
+  it("does not treat a pile of unverified public_discovery candidates as serviceable -- routes to manual_review instead", async () => {
+    const { repository, testDb, insertJob } = await buildHarness();
+
+    // Freshly public_discovery-imported candidates: exactly what the 146-row
+    // Melbourne seed import produces. None of these should be enough to
+    // auto-charge a customer, no matter how many of them exist.
+    for (let i = 0; i < 5; i++) {
+      await testDb.insert(candidateProvidersTable).values({
+        businessName: `Unverified Electrician ${i}`,
+        normalizedBusinessName: normalizeBusinessName(`Unverified Electrician ${i}`),
+        trade: "Electrical",
+        subServices: [],
+        phone: `040000020${i}`,
+        normalizedPhone: `+6140000020${i}`,
+        serviceSuburbs: ["Richmond"],
+        servicePostcodes: ["3121"],
+        source: "public_discovery",
+        verificationStatus: "unverified",
+        contactEligibility: "manual_only",
+      });
+    }
+
+    const job = await insertJob({ trade: "Electrical" });
+    const serviceability = await repository.runServiceabilityCheck(job.id);
+
+    expect(serviceability?.outcome).toBe("manual_review");
+    expect(serviceability?.rawCandidateCount).toBe(5);
+    expect(serviceability?.verifiedCandidateCount).toBe(0);
+    expect(serviceability?.dispatchReadyCount).toBe(0);
+
+    const checkout = await repository.startCheckout({
+      jobId: job.id,
+      successUrl: "https://sourcetradie.com.au/request/1?paid=1",
+      cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
+    });
+    expect(checkout.ok).toBe(false);
+    if (!checkout.ok) expect(checkout.errorCode).toContain("not_serviceable");
+  });
+
+  it("becomes serviceable once at least one candidate is promoted to dispatch_eligible", async () => {
+    const { repository, testDb, insertJob } = await buildHarness();
+
+    await testDb.insert(candidateProvidersTable).values([
+      {
+        businessName: "Unverified Locksmith",
+        normalizedBusinessName: normalizeBusinessName("Unverified Locksmith"),
+        trade: "Locksmith",
+        subServices: [],
+        phone: "0400000300",
+        normalizedPhone: "+61400000300",
+        serviceSuburbs: ["Richmond"],
+        servicePostcodes: ["3121"],
+        source: "public_discovery",
+        verificationStatus: "unverified",
+      },
+      {
+        businessName: "Checked Locksmith",
+        normalizedBusinessName: normalizeBusinessName("Checked Locksmith"),
+        trade: "Locksmith",
+        subServices: [],
+        phone: "0400000301",
+        normalizedPhone: "+61400000301",
+        serviceSuburbs: ["Richmond"],
+        servicePostcodes: ["3121"],
+        source: "public_discovery",
+        verificationStatus: "dispatch_eligible",
+      },
+    ]);
+
+    const job = await insertJob({ trade: "Locksmith" });
+    const serviceability = await repository.runServiceabilityCheck(job.id);
+
+    expect(serviceability?.outcome).toBe("serviceable");
+    expect(serviceability?.rawCandidateCount).toBe(2);
+    expect(serviceability?.dispatchReadyCount).toBe(1);
+  });
+
   it("finds a multi-trade candidate for a job under a trade that isn't its legacy single trade column", async () => {
     const { repository, testDb, insertJob } = await buildHarness();
 
@@ -340,6 +430,7 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
       .insert(candidateProvidersTable)
       .values({
         businessName: "Lexity",
+        normalizedBusinessName: normalizeBusinessName("Lexity"),
         trade: "Electrical", // legacy column deliberately does NOT say Heating & Cooling
         subServices: [],
         phone: "1300993447",
@@ -347,6 +438,7 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
         serviceSuburbs: ["Richmond"],
         servicePostcodes: ["3121"],
         source: "test-seed",
+        verificationStatus: "dispatch_eligible",
       })
       .returning();
     await testDb.insert(candidateProviderTradesTable).values([
@@ -376,6 +468,7 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
       .insert(candidateProvidersTable)
       .values({
         businessName: "Cloud Flow Pty Ltd",
+        normalizedBusinessName: normalizeBusinessName("Cloud Flow Pty Ltd"),
         tradingNames: ["Solus Plumbing", "Solus Locksmith"],
         trade: "Plumbing",
         subServices: [],

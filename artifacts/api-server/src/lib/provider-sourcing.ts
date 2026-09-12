@@ -54,7 +54,7 @@ export function rankCandidates(job: SourcingJob, candidates: CandidateForRanking
       if (candidate.servicePostcodes.includes(job.postcode)) { score += 25; reasons.push("postcode coverage"); }
       else if (candidate.serviceSuburbs.some((suburb) => same(suburb, job.suburb))) { score += 20; reasons.push("suburb coverage"); }
       if (job.urgency === "ASAP" && candidate.afterHoursAvailable) { score += 8; reasons.push("urgent availability"); }
-      if (candidate.verificationStatus === "checked") { score += 8; reasons.push("credentials checked"); }
+      if (candidate.verificationStatus === "checked" || candidate.verificationStatus === "dispatch_eligible") { score += 8; reasons.push("credentials checked"); }
       if (candidate.tier === "preferred") score += 6;
       if (candidate.responseCount > 0) score += Math.min(3, (candidate.acceptanceCount / candidate.responseCount) * 3);
       return { ...candidate, score, reasons };

@@ -45,6 +45,7 @@ import {
   type SmsProvider,
   type SmsSendResult,
 } from "./sms-provider";
+import { VERIFICATION_STATUS_VALUES } from "./serviceability";
 
 const PARTNER_DASHBOARD_URL = "https://sourcetradie.com.au/partner/dashboard";
 
@@ -323,6 +324,14 @@ function uniqueNormalized(values: string[]): string[] {
     result.push(normalized);
   }
   return result;
+}
+
+// Mirrors normalizeName() in scripts/generate-candidate-import-sql.mjs --
+// candidate_providers' identity-key uniqueness is case/punctuation-insensitive
+// (see migration 0017), so any code path that inserts a candidate must
+// derive this the same way.
+function normalizeBusinessName(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 export class SourceTradieRepository {
@@ -724,6 +733,7 @@ export class SourceTradieRepository {
       .insert(candidateProvidersTable)
       .values({
         ...input,
+        normalizedBusinessName: normalizeBusinessName(input.businessName),
         contactName: input.contactName ?? null,
         website: input.website ?? null,
         normalHours: input.normalHours ?? null,
@@ -744,7 +754,7 @@ export class SourceTradieRepository {
     input: {
       action: "mark_dnc" | "clear_dnc" | "set_verification" | "set_tier";
       reason?: string;
-      verificationStatus?: "candidate" | "checked" | "rejected";
+      verificationStatus?: (typeof VERIFICATION_STATUS_VALUES)[number];
       tier?: "candidate" | "backup" | "preferred";
     },
     actorAuthUserId: string,
