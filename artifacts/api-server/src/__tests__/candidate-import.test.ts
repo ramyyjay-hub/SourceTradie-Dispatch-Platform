@@ -14,13 +14,11 @@ function validRecord(overrides: Partial<Record<string, unknown>> = {}) {
     businessName: "Test Plumbing Co",
     trade: "Plumbing",
     subServices: ["hot water"],
-    zone: "North",
+    zones: ["North"],
     serviceSuburbs: ["Preston"],
-    servicePostcodes: ["3072"],
     phone: "0400 000 111",
     afterHoursAvailable: false,
     sourceUrl: "https://example.com/test-plumbing-co",
-    lastCheckedAt: "2026-09-01",
     ...overrides,
   };
 }
@@ -52,6 +50,16 @@ describe("candidate import: safety guarantees", () => {
     const parsed = CandidateImportRecordSchema.parse(validRecord());
     expect(toCandidateProviderInsert(parsed).source).toBe("public_discovery");
   });
+
+  it("never invents a lastCheckedAt when the source doesn't provide one", () => {
+    const parsed = CandidateImportRecordSchema.parse(validRecord());
+    expect(toCandidateProviderInsert(parsed).lastCheckedAt).toBeNull();
+  });
+
+  it("never invents postcodes when the source doesn't provide them", () => {
+    const parsed = CandidateImportRecordSchema.parse(validRecord());
+    expect(toCandidateProviderInsert(parsed).servicePostcodes).toEqual([]);
+  });
 });
 
 describe("candidate import: validation", () => {
@@ -60,16 +68,21 @@ describe("candidate import: validation", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("rejects an unsupported trade", () => {
-    const [result] = validateCandidateImportBatch([validRecord({ trade: "Roof Painting" })]);
+  it("accepts a trade outside the initial launch list (later-expansion categories still valid data)", () => {
+    const [result] = validateCandidateImportBatch([validRecord({ trade: "Tree / Arborist" })]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a record with no zones at all", () => {
+    const [result] = validateCandidateImportBatch([validRecord({ zones: [] })]);
     expect(result.ok).toBe(false);
   });
 
-  it("rejects a postcode that isn't 4 digits", () => {
+  it("accepts a record covering multiple zones", () => {
     const [result] = validateCandidateImportBatch([
-      validRecord({ servicePostcodes: ["VIC"] }),
+      validRecord({ zones: ["North", "West", "East", "South-East", "Bayside/Inner"] }),
     ]);
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
   });
 
   it("requires a sourceUrl for every record (audit trail)", () => {
@@ -90,7 +103,7 @@ describe("candidate import: validation", () => {
 });
 
 describe("candidate import: coverage summary", () => {
-  it("reports every trade x zone cell, including empty ones", () => {
+  it("reports every launch trade x zone cell, including empty ones", () => {
     const cells = summarizeCoverage([]);
     expect(cells.length).toBe(SUPPORTED_LAUNCH_TRADES.length * MELBOURNE_LAUNCH_ZONES.length);
     expect(cells.every((cell) => cell.count === 0 && !cell.meetsTarget)).toBe(true);
@@ -99,7 +112,7 @@ describe("candidate import: coverage summary", () => {
   it("marks a cell as meeting target once it reaches the coverage threshold", () => {
     const records = Array.from({ length: TARGET_CANDIDATES_PER_CELL }, (_, i) =>
       CandidateImportRecordSchema.parse(
-        validRecord({ businessName: `Plumber ${i}`, zone: "North", trade: "Plumbing" }),
+        validRecord({ businessName: `Plumber ${i}`, zones: ["North"], trade: "Plumbing" }),
       ),
     );
     const cells = summarizeCoverage(records);
@@ -110,5 +123,22 @@ describe("candidate import: coverage summary", () => {
     const westPlumbing = cells.find((c) => c.trade === "Plumbing" && c.zone === "West");
     expect(westPlumbing?.count).toBe(0);
     expect(westPlumbing?.meetsTarget).toBe(false);
+  });
+
+  it("counts a Melbourne-wide (multi-zone) candidate once in every zone it covers", () => {
+    const record = CandidateImportRecordSchema.parse(
+      validRecord({ zones: [...MELBOURNE_LAUNCH_ZONES] }),
+    );
+    const cells = summarizeCoverage([record]);
+    const plumbingCells = cells.filter((c) => c.trade === "Plumbing");
+    expect(plumbingCells.every((c) => c.count === 1)).toBe(true);
+  });
+
+  it("does not count a non-launch trade toward the coverage grid", () => {
+    const record = CandidateImportRecordSchema.parse(
+      validRecord({ trade: "Tree / Arborist", zones: ["North"] }),
+    );
+    const cells = summarizeCoverage([record]);
+    expect(cells.every((c) => c.count === 0)).toBe(true);
   });
 });
