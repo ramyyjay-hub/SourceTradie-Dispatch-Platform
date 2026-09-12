@@ -42,6 +42,7 @@ async function createTestApi(
     "0012_paid_dispatch_foundation.sql",
     "0013_candidate_contact_eligibility.sql",
     "0014_candidate_provider_trades.sql",
+    "0015_candidate_trading_names.sql",
   ].map((file) =>
     path.resolve(import.meta.dirname, "../../../../lib/db/migrations", file),
   );

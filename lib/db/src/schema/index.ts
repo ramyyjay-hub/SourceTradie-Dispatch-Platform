@@ -409,6 +409,8 @@ export const candidateProvidersTable = pgTable(
   {
     id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
     businessName: text("business_name").notNull(),
+    /** Other registered/trading names this same identity operates under (e.g. ABN-verified trading names). */
+    tradingNames: jsonb("trading_names").$type<string[]>().notNull().default([]),
     contactName: text("contact_name"),
     trade: text("trade").notNull(),
     subServices: jsonb("sub_services").$type<string[]>().notNull().default([]),
@@ -469,6 +471,8 @@ export const candidateProviderTradesTable = pgTable(
       .notNull()
       .references(() => candidateProvidersTable.id, { onDelete: "cascade" }),
     trade: text("trade").notNull(),
+    /** Trading name to show customers for this specific capability, if it differs from businessName. */
+    tradingName: text("trading_name"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

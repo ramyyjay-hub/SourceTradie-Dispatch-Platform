@@ -96,6 +96,10 @@ function buildRepository(
       import.meta.dirname,
       "../../../../lib/db/migrations/0014_candidate_provider_trades.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0015_candidate_trading_names.sql",
+    ),
   ];
 
   return Promise.all(

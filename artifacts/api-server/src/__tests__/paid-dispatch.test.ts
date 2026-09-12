@@ -36,6 +36,7 @@ const MIGRATION_FILES = [
   "0012_paid_dispatch_foundation.sql",
   "0013_candidate_contact_eligibility.sql",
   "0014_candidate_provider_trades.sql",
+  "0015_candidate_trading_names.sql",
 ];
 
 /**
