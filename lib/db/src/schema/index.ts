@@ -473,6 +473,8 @@ export const candidateProviderTradesTable = pgTable(
     trade: text("trade").notNull(),
     /** Trading name to show customers for this specific capability, if it differs from businessName. */
     tradingName: text("trading_name"),
+    /** The public source that supports THIS trade capability specifically (may differ from the provider's general source_url for multi-trade identities). */
+    sourceUrl: text("source_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

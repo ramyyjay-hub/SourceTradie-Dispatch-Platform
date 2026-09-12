@@ -37,6 +37,7 @@ const MIGRATION_FILES = [
   "0013_candidate_contact_eligibility.sql",
   "0014_candidate_provider_trades.sql",
   "0015_candidate_trading_names.sql",
+  "0016_candidate_trade_source_url.sql",
 ];
 
 /**
@@ -349,8 +350,16 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
       })
       .returning();
     await testDb.insert(candidateProviderTradesTable).values([
-      { candidateProviderId: lexity!.id, trade: "Electrical" },
-      { candidateProviderId: lexity!.id, trade: "Heating & Cooling" },
+      {
+        candidateProviderId: lexity!.id,
+        trade: "Electrical",
+        sourceUrl: "https://example.com/electrical-listing",
+      },
+      {
+        candidateProviderId: lexity!.id,
+        trade: "Heating & Cooling",
+        sourceUrl: "https://example.com/hvac-listing",
+      },
     ]);
 
     const job = await insertJob({ trade: "Heating & Cooling" });
@@ -358,6 +367,56 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
 
     expect(serviceability?.outcome).toBe("serviceable");
     expect(serviceability?.candidateCount).toBeGreaterThan(0);
+  });
+
+  it("retains a distinct source_url per capability for a multi-trade identity", async () => {
+    const { testDb } = await buildHarness();
+
+    const [cloudFlow] = await testDb
+      .insert(candidateProvidersTable)
+      .values({
+        businessName: "Cloud Flow Pty Ltd",
+        tradingNames: ["Solus Plumbing", "Solus Locksmith"],
+        trade: "Plumbing",
+        subServices: [],
+        phone: "1300730896",
+        normalizedPhone: "1300730896",
+        serviceSuburbs: [],
+        servicePostcodes: [],
+        source: "public_discovery",
+        sourceUrl: "https://www.solusplumbing.com.au/vic/",
+      })
+      .returning();
+
+    await testDb.insert(candidateProviderTradesTable).values([
+      {
+        candidateProviderId: cloudFlow!.id,
+        trade: "Plumbing",
+        tradingName: "Solus Plumbing",
+        sourceUrl: "https://www.solusplumbing.com.au/vic/",
+      },
+      {
+        candidateProviderId: cloudFlow!.id,
+        trade: "Locksmith",
+        tradingName: "Solus Locksmith",
+        sourceUrl: "https://www.soluslocksmith.com.au/vic/",
+      },
+    ]);
+
+    const capabilities = await testDb
+      .select()
+      .from(candidateProviderTradesTable)
+      .where(eq(candidateProviderTradesTable.candidateProviderId, cloudFlow!.id));
+
+    const plumbing = capabilities.find((c) => c.trade === "Plumbing");
+    const locksmith = capabilities.find((c) => c.trade === "Locksmith");
+
+    expect(plumbing?.sourceUrl).toBe("https://www.solusplumbing.com.au/vic/");
+    expect(locksmith?.sourceUrl).toBe("https://www.soluslocksmith.com.au/vic/");
+    expect(plumbing?.sourceUrl).not.toBe(locksmith?.sourceUrl);
+    // The provider-level source_url stays the canonical/general one, independent
+    // of either capability-specific source.
+    expect(cloudFlow!.sourceUrl).toBe("https://www.solusplumbing.com.au/vic/");
   });
 });
 

@@ -204,6 +204,14 @@ for (const group of clusters.values()) {
   const capabilities = [...new Set(group.map((r) => r.category))];
   const allZones = [...new Set(group.flatMap((r) => r.zones))];
   const licenceDetailsByTrade = [...new Set(group.map((r) => `${r.category}: ${r.licenceDetails ?? "n/a"}`))];
+  // The public source that supports THIS specific capability -- the first row
+  // seen for that trade in the cluster. For a merged multi-trade identity
+  // this legitimately differs per trade (e.g. Solus Plumbing's listing vs
+  // Solus Locksmith's); for a single-trade identity it's just that row's URL.
+  const sourceUrlByTrade = {};
+  for (const r of group) {
+    if (!(r.category in sourceUrlByTrade)) sourceUrlByTrade[r.category] = r.sourceUrl;
+  }
 
   const businessName = override ? override.canonicalName : primary.businessName;
   const tradingNames = override
@@ -217,11 +225,14 @@ for (const group of clusters.values()) {
     verifiedNote: override?.note ?? null,
     capabilities,
     tradingNameByTrade,
+    sourceUrlByTrade,
     zones: allZones,
     phone: group.find((r) => normalizePhoneDigits(r.phone))?.phone ?? primary.phone,
     website: group.find((r) => r.website)?.website || null,
     afterHoursAvailable: group.some((r) => r.afterHoursAvailable),
     licenceDetails: licenceDetailsByTrade.join(" | "),
+    // Canonical/general source for the business identity itself -- the
+    // primary row's URL, independent of any single capability's own source.
     sourceUrl: primary.sourceUrl,
     sourceRows: group.map((r) => r.rowNumber),
   });
@@ -234,7 +245,10 @@ const totalCapabilityRows = merged.reduce((sum, c) => sum + c.capabilities.lengt
 
 function providerBlock(p) {
   const capabilityValues = p.capabilities
-    .map((trade) => `(${sqlString(trade)}, ${sqlString(p.tradingNameByTrade[trade] ?? null)})`)
+    .map(
+      (trade) =>
+        `(${sqlString(trade)}, ${sqlString(p.tradingNameByTrade[trade] ?? null)}, ${sqlString(p.sourceUrlByTrade[trade] ?? p.sourceUrl)})`,
+    )
     .join(",\n    ");
   return `WITH upsert AS (
   INSERT INTO candidate_providers (
@@ -253,10 +267,10 @@ function providerBlock(p) {
   ON CONFLICT (normalized_phone) DO UPDATE SET updated_at = now()
   RETURNING id
 )
-INSERT INTO candidate_provider_trades (candidate_provider_id, trade, trading_name)
-SELECT id, v.trade, v.trading_name FROM upsert, (VALUES
+INSERT INTO candidate_provider_trades (candidate_provider_id, trade, trading_name, source_url)
+SELECT id, v.trade, v.trading_name, v.source_url FROM upsert, (VALUES
     ${capabilityValues}
-  ) AS v(trade, trading_name)
+  ) AS v(trade, trading_name, source_url)
 ON CONFLICT (candidate_provider_id, trade) DO NOTHING;`;
 }
 
@@ -312,7 +326,7 @@ console.log("\n=== PROVING THE GENERATED SQL (throwaway in-memory Postgres, zero
 const rollbackClient = await freshDb();
 // Corrupt the first provider's capability insert (trade -> NULL, violating
 // NOT NULL) to force a real failure partway through the batch.
-const firstCapabilityBlockIndex = fullSql.indexOf("AS v(trade, trading_name)");
+const firstCapabilityBlockIndex = fullSql.indexOf("AS v(trade, trading_name, source_url)");
 const corruptedSql =
   fullSql.slice(0, firstCapabilityBlockIndex) +
   fullSql.slice(firstCapabilityBlockIndex).replace(/\('([^']*)',/, "(NULL,");
@@ -356,6 +370,37 @@ const cloudFlow = await idemClient.query(
 );
 console.log(`\nLexity in imported data: ${JSON.stringify(lexity.rows)}`);
 console.log(`Cloud Flow (Solus) in imported data: ${JSON.stringify(cloudFlow.rows)}`);
+
+// -- Prove per-capability source_url provenance: Cloud Flow's two trades
+// must carry DISTINCT source URLs (they were sourced from different listing
+// pages); the provider-level source_url must stay the general/canonical one.
+const cloudFlowCapabilities = await idemClient.query(
+  "select cpt.trade, cpt.trading_name, cpt.source_url from candidate_provider_trades cpt join candidate_providers cp on cp.id = cpt.candidate_provider_id where cp.business_name = 'Cloud Flow Pty Ltd' order by cpt.trade",
+);
+const cloudFlowProvider = await idemClient.query(
+  "select source_url from candidate_providers where business_name = 'Cloud Flow Pty Ltd'",
+);
+const plumbingCap = cloudFlowCapabilities.rows.find((r) => r.trade === "Plumbing");
+const locksmithCap = cloudFlowCapabilities.rows.find((r) => r.trade === "Locksmith");
+const distinctUrlsPass =
+  plumbingCap?.source_url &&
+  locksmithCap?.source_url &&
+  plumbingCap.source_url !== locksmithCap.source_url &&
+  cloudFlowProvider.rows[0]?.source_url === plumbingCap.source_url; // provider-level = primary row's URL
+console.log(`\nCloud Flow capability-level source URLs: ${JSON.stringify(cloudFlowCapabilities.rows)}`);
+console.log(`Cloud Flow provider-level (canonical) source URL: ${cloudFlowProvider.rows[0]?.source_url}`);
+console.log(`Distinct per-capability source_url test (Cloud Flow Plumbing vs Locksmith): ${distinctUrlsPass ? "PASS" : "FAIL"}`);
+
+const bgmCapabilities = await idemClient.query(
+  "select cpt.trade, cpt.source_url from candidate_provider_trades cpt join candidate_providers cp on cp.id = cpt.candidate_provider_id where cp.business_name = 'BGM Services' order by cpt.trade",
+);
+const bgmPainting = bgmCapabilities.rows.find((r) => r.trade === "Painting");
+const bgmHandyman = bgmCapabilities.rows.find((r) => r.trade === "Handyman / Property Maintenance");
+const bgmDistinctPass =
+  bgmPainting?.source_url && bgmHandyman?.source_url && bgmPainting.source_url !== bgmHandyman.source_url;
+console.log(`BGM Services capability-level source URLs: ${JSON.stringify(bgmCapabilities.rows)}`);
+console.log(`Distinct per-capability source_url test (BGM Painting vs Handyman): ${bgmDistinctPass ? "PASS" : "FAIL"}`);
+
 const outreachColumnCheck = await idemClient.query(
   "select column_name from information_schema.columns where table_name = 'provider_outreach_attempts' and column_name = 'candidate_provider_id'",
 );
@@ -371,6 +416,8 @@ console.log(`REJECTED: ${rejected.length}`);
 for (const r of rejected) console.log(`  row ${r.row} (${r.business || "unnamed"}): ${r.reasons.join(", ")}`);
 console.log(`MULTI-TRADE PROVIDERS: ${multiTradeProviders.length}`);
 for (const p of multiTradeProviders) console.log(`  "${p.businessName}"${p.tradingNames.length ? ` (aka ${p.tradingNames.join(", ")})` : ""}: ${p.capabilities.join(", ")}`);
+console.log(`DISTINCT PER-CAPABILITY SOURCE URL (Cloud Flow): ${distinctUrlsPass ? "PASS" : "FAIL"}`);
+console.log(`DISTINCT PER-CAPABILITY SOURCE URL (BGM Services): ${bgmDistinctPass ? "PASS" : "FAIL"}`);
 console.log(`CONTACT ELIGIBILITY: 100% manual_only (hard-coded in the generated SQL, not derived from source data)`);
 console.log(`VERIFICATION: 100% unverified (hard-coded)`);
 console.log(`OUTREACH TO BE TRIGGERED: 0 (this script never touches provider_outreach_attempts or any notification path)`);
