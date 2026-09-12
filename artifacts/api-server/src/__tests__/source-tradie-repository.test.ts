@@ -88,6 +88,10 @@ function buildRepository(
       import.meta.dirname,
       "../../../../lib/db/migrations/0012_paid_dispatch_foundation.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0013_candidate_contact_eligibility.sql",
+    ),
   ];
 
   return Promise.all(

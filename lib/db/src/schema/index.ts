@@ -423,7 +423,13 @@ export const candidateProvidersTable = pgTable(
     licenceStatus: text("licence_status").notNull().default("not_checked"),
     insuranceStatus: text("insurance_status").notNull().default("not_checked"),
     source: text("source").notNull(),
+    sourceUrl: text("source_url"),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
     verificationStatus: text("verification_status").notNull().default("candidate"),
+    // Hard safety gate: automated outreach (when built) must only ever
+    // contact candidates where this is explicitly not "manual_only".
+    // Defaults closed -- every imported candidate starts manual-only.
+    contactEligibility: text("contact_eligibility").notNull().default("manual_only"),
     outreachStatus: text("outreach_status").notNull().default("not_contacted"),
     lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
     optedOutAt: timestamp("opted_out_at", { withTimezone: true }),
@@ -441,6 +447,7 @@ export const candidateProvidersTable = pgTable(
     uniqueIndex("candidate_providers_normalized_phone_uidx").on(table.normalizedPhone),
     index("candidate_providers_trade_idx").on(table.trade),
     index("candidate_providers_outreach_idx").on(table.outreachStatus),
+    index("candidate_providers_contact_eligibility_idx").on(table.contactEligibility),
   ],
 );
 
