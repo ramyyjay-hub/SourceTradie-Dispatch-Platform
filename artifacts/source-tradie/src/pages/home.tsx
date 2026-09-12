@@ -34,6 +34,21 @@ export default function Home() {
         <section className="content-wrap py-20 md:py-20">
           <div className="grid gap-10 md:grid-cols-[.7fr_1.3fr]"><div><p className="font-mono-ui text-[10px] uppercase tracking-[.16em] text-[hsl(var(--secondary))]">We do the chasing</p><h2 className="mt-4 max-w-sm text-4xl font-bold leading-[.98] tracking-[-.065em] md:text-5xl">Tell us once. We’ll take it from there.</h2></div><div className="grid gap-4 sm:grid-cols-3"><Process index="01" title="Describe the problem" detail="Use plain words. You do not need to know which trade you need." /><Process index="02" title="We source locally" detail="We assess the request and approach one suitable provider at a time." /><Process index="03" title="You stay in control" detail="Review the useful details we obtain. Nothing proceeds until you approve the next step." /></div></div>
         </section>
+        <section className="content-wrap py-20 md:py-24">
+          <p className="font-mono-ui text-[10px] uppercase tracking-[.16em] text-[hsl(var(--secondary))]">The old way vs SourceTradie</p>
+          <h2 className="mt-4 max-w-2xl text-4xl font-bold leading-[.98] tracking-[-.065em] md:text-6xl">Stop chasing tradies.<br /><span className="font-display font-normal italic text-[hsl(var(--secondary))]">Let SourceTradie chase one for you.</span></h2>
+          <div className="mt-10 grid gap-6 md:grid-cols-2">
+            <div className="rounded-[1.5rem] border border-[hsl(var(--border))] bg-[hsl(var(--muted)/.4)] p-7">
+              <p className="font-mono-ui text-[10px] uppercase tracking-[.14em] text-[hsl(var(--muted-foreground))]">Old way</p>
+              <ul className="mt-5 space-y-4 text-sm leading-6 text-[hsl(var(--muted-foreground))]"><li>Search directories for a trade you’re not even sure you need</li><li>Call businesses one by one, explaining the job each time</li><li>Wait on hold, or wait for a callback that may not come</li><li>Repeat your description to every new person</li><li>Compare scattered responses with no single view</li></ul>
+            </div>
+            <div className="rounded-[1.5rem] border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.06)] p-7">
+              <p className="font-mono-ui text-[10px] uppercase tracking-[.14em] text-[hsl(var(--secondary))]">SourceTradie</p>
+              <ul className="mt-5 space-y-4 text-sm leading-6"><li className="flex gap-2.5"><Check size={16} className="mt-0.5 shrink-0 text-[hsl(var(--secondary))]" /><span>Tell us once, in plain words</span></li><li className="flex gap-2.5"><Check size={16} className="mt-0.5 shrink-0 text-[hsl(var(--secondary))]" /><span>We assess it and source a suitable local provider</span></li><li className="flex gap-2.5"><Check size={16} className="mt-0.5 shrink-0 text-[hsl(var(--secondary))]" /><span>We coordinate the details on your behalf</span></li><li className="flex gap-2.5"><Check size={16} className="mt-0.5 shrink-0 text-[hsl(var(--secondary))]" /><span>We bring the next step back to you</span></li><li className="flex gap-2.5"><Check size={16} className="mt-0.5 shrink-0 text-[hsl(var(--secondary))]" /><span>You approve before anything proceeds</span></li></ul>
+            </div>
+          </div>
+          <Link href="/request" className="btn-accent mt-9 inline-flex" data-testid="link-home-differentiation-request">Find my tradie <ArrowRight size={17} /></Link>
+        </section>
         <section className="bg-[hsl(var(--primary))] py-20 text-[hsl(var(--primary-foreground))] md:py-28">
           <div className="content-wrap grid gap-12 md:grid-cols-[1fr_.8fr] md:items-end"><div><p className="font-mono-ui text-[10px] uppercase tracking-[.16em] text-[hsl(var(--accent))]">Made for Melbourne homes</p><h2 className="mt-4 max-w-2xl text-5xl font-bold leading-[.9] tracking-[-.07em] md:text-7xl">Good service starts before the knock.</h2></div><div className="space-y-5 text-[hsl(var(--primary-foreground)/.72)]"><Feature icon={<ShieldCheck size={18} />} text="Safety-aware prompts for urgent problems" /><Feature icon={<UsersRound size={18} />} text="A local network, not a call-centre lottery" /><Feature icon={<Sparkles size={18} />} text="A clear answer at every stage" /></div></div>
         </section>

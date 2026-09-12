@@ -8,6 +8,8 @@
 import type { AcceptedTradie } from './acceptedTradie';
 import type { CustomerConfirmedIntake } from './customerConfirmedIntake';
 import type { JobAssessment } from './jobAssessment';
+import type { PaidFlowState } from './paidFlowState';
+import type { PaidMatch } from './paidMatch';
 import type { PricingSnapshot } from './pricingSnapshot';
 
 export interface PublicJobStatus {
@@ -19,4 +21,6 @@ export interface PublicJobStatus {
   assessment?: JobAssessment | null;
   expectedPrice: PricingSnapshot | null;
   acceptedTradie: AcceptedTradie | null;
+  paidFlowState: PaidFlowState;
+  paidMatch: PaidMatch | null;
 }

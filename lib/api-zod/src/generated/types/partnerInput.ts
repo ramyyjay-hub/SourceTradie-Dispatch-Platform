@@ -5,8 +5,11 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { PartnerAttribution } from './partnerAttribution';
 
 export interface PartnerInput {
+  /** @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ */
+  submissionId: string;
   businessName: string;
   contactName: string;
   abn?: string;
@@ -18,4 +21,7 @@ export interface PartnerInput {
   radiusKm: number;
   services?: string[];
   emergencyJobs?: boolean;
+  /** @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ */
+  funnelSessionId?: string;
+  attribution?: PartnerAttribution;
 }

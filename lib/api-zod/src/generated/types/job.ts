@@ -5,8 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { JobAssessment } from "./jobAssessment";
-import type { PricingSnapshot } from "./pricingSnapshot";
+import type { JobAssessment } from './jobAssessment';
+import type { PricingSnapshot } from './pricingSnapshot';
 
 export interface Job {
   id: number;

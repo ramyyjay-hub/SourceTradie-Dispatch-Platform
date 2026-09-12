@@ -84,6 +84,10 @@ function buildRepository(
       import.meta.dirname,
       "../../../../lib/db/migrations/0011_managed_sourcing.sql",
     ),
+    path.resolve(
+      import.meta.dirname,
+      "../../../../lib/db/migrations/0012_paid_dispatch_foundation.sql",
+    ),
   ];
 
   return Promise.all(

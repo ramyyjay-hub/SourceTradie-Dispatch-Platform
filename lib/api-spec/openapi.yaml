@@ -222,6 +222,193 @@ paths:
         "409":
           description: Job is not ready for customer confirmation
 
+  /jobs/{id}/serviceability:
+    post:
+      operationId: runServiceabilityCheck
+      tags: [jobs]
+      summary: >-
+        Run the serviceability gate for a job (trade/coverage check). Must
+        return "serviceable" before a paid checkout session can be started.
+        Never charges anything.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Serviceability outcome
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceabilityCheckResult"
+        "404":
+          description: Job not found
+
+  /jobs/{id}/checkout:
+    post:
+      operationId: startCheckout
+      tags: [jobs]
+      summary: >-
+        Create a TEST-mode Stripe checkout session for the $29.99 sourcing
+        fee. Only allowed once the job has been marked serviceable. Payment
+        is only ever confirmed by the Stripe webhook, never by this response
+        or the browser success redirect.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutInput"
+      responses:
+        "200":
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutSession"
+        "400":
+          description: Invalid checkout request
+        "404":
+          description: Job not found
+        "409":
+          description: Job is not serviceable or Stripe is not configured
+
+  /jobs/{id}/approve-match:
+    post:
+      operationId: approveMatch
+      tags: [jobs]
+      summary: >-
+        Customer approves the manually-sourced tradie match. Only after this
+        call is the exact address/contact ever released to the matched
+        provider.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveMatchInput"
+      responses:
+        "200":
+          description: Match approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "404":
+          description: Job not found or token invalid
+        "409":
+          description: Job is not awaiting match approval
+
+  /admin/paid-jobs:
+    get:
+      operationId: listPaidJobs
+      tags: [admin]
+      summary: >-
+        List every job that has entered the paid AI-dispatch flow (admin
+        only) so an operator can manually source, match, or refund.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Paid jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaidJob"
+        "401":
+          description: Authentication required
+        "403":
+          description: Admin access required
+
+  /admin/jobs/{id}/manual-match:
+    post:
+      operationId: recordManualMatch
+      tags: [admin]
+      summary: >-
+        Operator manually enters a sourced tradie match (no automated
+        outreach). Moves the job to match_ready for customer approval.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualMatchInput"
+      responses:
+        "200":
+          description: Match recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "401":
+          description: Authentication required
+        "403":
+          description: Admin access required
+        "404":
+          description: Job not found
+        "409":
+          description: Job is not in a sourcing state
+
+  /admin/jobs/{id}/mark-sourcing-failed:
+    post:
+      operationId: markSourcingFailed
+      tags: [admin]
+      summary: >-
+        Operator marks sourcing as failed. Triggers an automatic TEST-mode
+        Stripe refund of the sourcing fee.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Sourcing marked failed and refund initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkSourcingFailedResult"
+        "401":
+          description: Authentication required
+        "403":
+          description: Admin access required
+        "404":
+          description: Job not found
+        "409":
+          description: Job is not in a sourcing state
+
+  /admin/jobs/{id}/mark-completed:
+    post:
+      operationId: markJobCompleted
+      tags: [admin]
+      summary: Operator marks an approved paid job as completed
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Job marked completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "401":
+          description: Authentication required
+        "403":
+          description: Admin access required
+        "404":
+          description: Job not found
+        "409":
+          description: Job is not approved
+
   /partners:
     get:
       operationId: listPartners
@@ -647,6 +834,8 @@ components:
           intake,
           expectedPrice,
           acceptedTradie,
+          paidFlowState,
+          paidMatch,
         ]
       properties:
         reference: { type: string }
@@ -666,6 +855,12 @@ components:
         acceptedTradie:
           anyOf:
             - $ref: "#/components/schemas/AcceptedTradie"
+            - type: "null"
+        paidFlowState:
+          $ref: "#/components/schemas/PaidFlowState"
+        paidMatch:
+          anyOf:
+            - $ref: "#/components/schemas/PaidMatch"
             - type: "null"
 
     JobInput:
@@ -1172,3 +1367,136 @@ components:
         acceptedJobs: { type: number }
         declinedJobs: { type: number }
         completedJobs: { type: number }
+
+    PaidFlowState:
+      type: string
+      enum:
+        [
+          not_started,
+          serviceable,
+          manual_review,
+          unsupported,
+          checkout_started,
+          payment_confirmed,
+          sourcing,
+          match_ready,
+          approved,
+          completed,
+          sourcing_failed,
+          refund_pending,
+          refunded,
+        ]
+
+    ServiceabilityCheckResult:
+      type: object
+      required: [outcome, inferredTrade, candidateCount, reason]
+      properties:
+        outcome:
+          type: string
+          enum: [serviceable, manual_review, unsupported]
+        inferredTrade: { type: string }
+        candidateCount: { type: number }
+        reason: { type: string }
+
+    CheckoutInput:
+      type: object
+      required: [successUrl, cancelUrl]
+      properties:
+        successUrl: { type: string, minLength: 1 }
+        cancelUrl: { type: string, minLength: 1 }
+
+    CheckoutSession:
+      type: object
+      required: [checkoutUrl, testMode]
+      properties:
+        checkoutUrl: { type: string }
+        testMode: { type: boolean }
+
+    ApproveMatchInput:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, minLength: 1 }
+
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, enum: [true] }
+
+    PaidMatch:
+      type: object
+      required:
+        [providerName, providerPhone, priceMinCents, priceMaxCents, eta, notes]
+      properties:
+        providerName: { type: string }
+        providerPhone: { type: ["string", "null"] }
+        priceMinCents: { type: number }
+        priceMaxCents: { type: number }
+        eta: { type: string }
+        notes: { type: ["string", "null"] }
+
+    ManualMatchInput:
+      type: object
+      required: [providerName, priceMinCents, priceMaxCents, eta]
+      properties:
+        providerName: { type: string, minLength: 1, maxLength: 200 }
+        providerPhone: { type: string, maxLength: 40 }
+        priceMinCents: { type: number, minimum: 0 }
+        priceMaxCents: { type: number, minimum: 0 }
+        eta: { type: string, minLength: 1, maxLength: 200 }
+        notes: { type: string, maxLength: 2000 }
+
+    MarkSourcingFailedResult:
+      type: object
+      required: [ok, refund]
+      properties:
+        ok: { type: boolean, enum: [true] }
+        refund:
+          type: string
+          enum: [initiated, failed, no_payment_on_file]
+
+    PaidJob:
+      type: object
+      required:
+        [
+          id,
+          reference,
+          description,
+          trade,
+          suburb,
+          postcode,
+          urgency,
+          preferredTime,
+          status,
+          customerName,
+          paidFlowState,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: number }
+        reference: { type: string }
+        description: { type: string }
+        trade: { type: string }
+        suburb: { type: string }
+        postcode: { type: string }
+        urgency: { type: string }
+        preferredTime: { type: string }
+        status: { type: string }
+        customerName: { type: string }
+        customerPhone: { type: ["string", "null"] }
+        customerEmail: { type: ["string", "null"] }
+        serviceAddressLine1: { type: ["string", "null"] }
+        serviceAddressLine2: { type: ["string", "null"] }
+        paidFlowState:
+          $ref: "#/components/schemas/PaidFlowState"
+        serviceabilityReason: { type: ["string", "null"] }
+        matchedProviderName: { type: ["string", "null"] }
+        matchedProviderPhone: { type: ["string", "null"] }
+        matchedProviderPriceMinCents: { type: ["number", "null"] }
+        matchedProviderPriceMaxCents: { type: ["number", "null"] }
+        matchedProviderEta: { type: ["string", "null"] }
+        matchedProviderNotes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }

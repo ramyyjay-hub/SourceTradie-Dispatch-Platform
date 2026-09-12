@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -15,15 +15,19 @@ import {
 import { Link, useLocation, useParams, useSearch } from "wouter";
 import {
   getGetJobQueryKey,
+  useApproveMatch,
   useConfirmDispatch,
   useCorrectJobIntake,
   useCreateJob,
   useGetJob,
   usePreviewPricing,
+  useRunServiceabilityCheck,
+  useStartCheckout,
 } from "@workspace/api-client-react";
 import type {
   CreateJobResponse,
   PricingSnapshot,
+  PublicJobStatus,
 } from "@workspace/api-client-react";
 import {
   BackLink,
@@ -35,6 +39,7 @@ import {
 import { extractExplicitPreferredTime } from "@/lib/intake-time";
 import { getCustomerLifecyclePresentation } from "@/lib/customer-lifecycle";
 import { trackHomeownerFunnelEvent } from "@/lib/homeowner-funnel";
+import { trackMetaHomeownerRequestSubmitted } from "@/lib/meta-pixel";
 import {
   getNextRequestFlowStep,
   getPreviousRequestFlowStep,
@@ -88,6 +93,7 @@ function RequestFlow({
   const [preferredTimeEdited, setPreferredTimeEdited] = useState(false);
   const [error, setError] = useState("");
   const started = useRef(false);
+  const metaConversionFired = useRef(false);
   const createJob = useCreateJob();
   const pricingPreview = usePreviewPricing();
   const urgentSignal = useMemo(
@@ -193,6 +199,14 @@ function RequestFlow({
       {
         onSuccess: (job) => {
           trackHomeownerFunnelEvent("homeowner_request_submitted", job.id);
+          // Meta homeowner conversion: fires exactly once, only once the
+          // backend has confirmed the request was created — never on page
+          // load, form start, submit, validation errors or failed
+          // requests. Kept separate from the partner Lead event.
+          if (!metaConversionFired.current) {
+            metaConversionFired.current = true;
+            trackMetaHomeownerRequestSubmitted(job.id);
+          }
           void uploadAndFinish(job);
         },
         onError: () =>
@@ -758,6 +772,28 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
     },
   );
   const confirmDispatch = useConfirmDispatch();
+  const runServiceabilityCheck = useRunServiceabilityCheck();
+  const serviceabilityTriggered = useRef(false);
+
+  useEffect(() => {
+    if (
+      job &&
+      job.paidFlowState === "not_started" &&
+      !serviceabilityTriggered.current
+    ) {
+      serviceabilityTriggered.current = true;
+      runServiceabilityCheck.mutate(
+        { id },
+        {
+          onSettled: () => {
+            void queryClient.invalidateQueries({
+              queryKey: getGetJobQueryKey(id, { token: requestToken }),
+            });
+          },
+        },
+      );
+    }
+  }, [job, id, requestToken, runServiceabilityCheck, queryClient]);
 
   if (!requestToken || requestToken.length < 16) {
     return (
@@ -905,6 +941,13 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
             )}
         </div>
 
+        <PaidSourcingPanel
+          id={id}
+          token={requestToken}
+          job={job}
+          queryClient={queryClient}
+        />
+
         {job.expectedPrice && (
           <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
             <SectionLabel>{job.expectedPrice.customerLabel}</SectionLabel>
@@ -966,6 +1009,240 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
       </main>
     </div>
   );
+}
+
+function PaidSourcingPanel({
+  id,
+  token,
+  job,
+  queryClient,
+}: {
+  id: number;
+  token: string;
+  job: PublicJobStatus;
+  queryClient: QueryClient;
+}) {
+  const startCheckout = useStartCheckout();
+  const approveMatch = useApproveMatch();
+  const [checkoutError, setCheckoutError] = useState("");
+
+  const handleCheckout = () => {
+    setCheckoutError("");
+    const returnUrl = window.location.href;
+    startCheckout.mutate(
+      { id, data: { successUrl: returnUrl, cancelUrl: returnUrl } },
+      {
+        onSuccess: (session) => {
+          window.location.href = session.checkoutUrl;
+        },
+        onError: () =>
+          setCheckoutError(
+            "We couldn't start checkout just now. Please try again.",
+          ),
+      },
+    );
+  };
+
+  const handleApprove = () => {
+    approveMatch.mutate(
+      { id, data: { token } },
+      {
+        onSuccess: (updated) => {
+          queryClient.setQueryData(getGetJobQueryKey(id, { token }), {
+            ...job,
+            ...updated,
+          });
+          void queryClient.invalidateQueries({
+            queryKey: getGetJobQueryKey(id, { token }),
+          });
+        },
+      },
+    );
+  };
+
+  if (job.paidFlowState === "not_started") return null;
+
+  if (job.paidFlowState === "serviceable") {
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
+        <SectionLabel>AI-assisted sourcing available</SectionLabel>
+        <p className="mt-2 text-2xl font-bold tracking-[-.04em]">
+          $29.99 AUD
+        </p>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+          We'll personally source a suitable local tradie for this job and
+          bring you a real price and ETA to approve. If we can't find a
+          suitable match, this fee is fully refunded. This is a TEST-mode
+          payment — no real charge is made.
+        </p>
+        <button
+          className="btn-accent mt-4"
+          disabled={startCheckout.isPending}
+          onClick={handleCheckout}
+          data-testid="button-start-checkout"
+        >
+          {startCheckout.isPending ? "Starting checkout" : "Get AI sourcing"}
+        </button>
+        {checkoutError && (
+          <p className="mt-3 text-sm text-[hsl(var(--destructive))]">
+            {checkoutError}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (job.paidFlowState === "manual_review") {
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
+        <SectionLabel>AI-assisted sourcing</SectionLabel>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+          This request needs a quick manual review before we can offer paid
+          sourcing. Your free request above is still being handled as normal.
+        </p>
+      </div>
+    );
+  }
+
+  if (job.paidFlowState === "unsupported") {
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
+        <SectionLabel>AI-assisted sourcing</SectionLabel>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+          We don't currently have coverage to offer paid sourcing for this
+          request, so we haven't charged anything. Your free request above is
+          still being handled as normal.
+        </p>
+      </div>
+    );
+  }
+
+  if (job.paidFlowState === "checkout_started") {
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
+        <SectionLabel>Checkout in progress</SectionLabel>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+          A secure TEST-mode checkout was started. If you didn't finish it or
+          your payment hasn't gone through, you can try again below.
+        </p>
+        <button
+          className="btn-quiet mt-4 border"
+          disabled={startCheckout.isPending}
+          onClick={handleCheckout}
+          data-testid="button-retry-checkout"
+        >
+          {startCheckout.isPending ? "Starting checkout" : "Retry checkout"}
+        </button>
+        {checkoutError && (
+          <p className="mt-3 text-sm text-[hsl(var(--destructive))]">
+            {checkoutError}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (
+    job.paidFlowState === "payment_confirmed" ||
+    job.paidFlowState === "sourcing"
+  ) {
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
+        <SectionLabel>Paid sourcing (TEST mode)</SectionLabel>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+          Your $29.99 sourcing fee has been received. We're personally
+          sourcing a suitable local tradie for this job now — we'll show a
+          real price and ETA here as soon as we have one.
+        </p>
+      </div>
+    );
+  }
+
+  if (job.paidFlowState === "match_ready" && job.paidMatch) {
+    const match = job.paidMatch;
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
+        <SectionLabel>Tradie sourced — approve to proceed</SectionLabel>
+        <p className="mt-2 text-xl font-bold">{match.providerName}</p>
+        <p className="mt-2 text-2xl font-bold tracking-[-.04em]">
+          {formatPrice(match.priceMinCents)}–{formatPrice(match.priceMaxCents)}
+        </p>
+        <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+          ETA: {match.eta}
+        </p>
+        {match.notes && (
+          <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+            {match.notes}
+          </p>
+        )}
+        <p className="mt-3 text-xs font-semibold">
+          Your exact address and contact details are still hidden. They are
+          only released once you approve this match.
+        </p>
+        <button
+          className="btn-main mt-4"
+          disabled={approveMatch.isPending}
+          onClick={handleApprove}
+          data-testid="button-approve-match"
+        >
+          {approveMatch.isPending ? "Approving" : "Approve this tradie"}
+        </button>
+      </div>
+    );
+  }
+
+  if (job.paidFlowState === "approved") {
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
+        <SectionLabel>Match approved</SectionLabel>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+          {job.paidMatch?.providerName ?? "Your matched tradie"} now has your
+          address and contact details and will be in touch to arrange the
+          job.
+        </p>
+      </div>
+    );
+  }
+
+  if (job.paidFlowState === "completed") {
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
+        <SectionLabel>Paid sourcing complete</SectionLabel>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+          This paid sourcing job has been marked complete.
+        </p>
+      </div>
+    );
+  }
+
+  if (
+    job.paidFlowState === "sourcing_failed" ||
+    job.paidFlowState === "refund_pending"
+  ) {
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--destructive)/.25)] bg-[hsl(var(--destructive)/.08)] p-5">
+        <SectionLabel>Sourcing unsuccessful</SectionLabel>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+          We weren't able to find a suitable tradie for this job. Your $29.99
+          sourcing fee is being refunded (TEST mode) — no action is needed
+          from you.
+        </p>
+      </div>
+    );
+  }
+
+  if (job.paidFlowState === "refunded") {
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
+        <SectionLabel>Sourcing fee refunded</SectionLabel>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+          Your $29.99 sourcing fee has been refunded (TEST mode).
+        </p>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function CorrectionPanel({

@@ -65,3 +65,18 @@ export function trackMetaLead() {
   if (typeof window === "undefined" || !window.fbq) return;
   window.fbq("track", "Lead");
 }
+
+/**
+ * Fires a HomeownerRequestSubmitted custom event. Only call this from the
+ * confirmed-success path of the homeowner request flow (after the API has
+ * returned 201 and the job is persisted) — never on page load, form start,
+ * submit, validation errors, or failed requests. Kept as a distinct custom
+ * event (not "Lead") so it never mixes with partner Lead reporting.
+ */
+export function trackMetaHomeownerRequestSubmitted(jobId: number | string) {
+  if (typeof window === "undefined" || !window.fbq) return;
+  window.fbq("trackCustom", "HomeownerRequestSubmitted", {
+    lead_type: "homeowner_request",
+    job_id: jobId,
+  });
+}

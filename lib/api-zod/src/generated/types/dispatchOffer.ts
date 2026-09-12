@@ -6,7 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DispatchOfferConfirmedPriceKind } from './dispatchOfferConfirmedPriceKind';
+import type { DispatchOfferEmailNotificationStatus } from './dispatchOfferEmailNotificationStatus';
 import type { DispatchOfferNotificationStatus } from './dispatchOfferNotificationStatus';
+import type { DispatchOfferSmsNotificationStatus } from './dispatchOfferSmsNotificationStatus';
 
 export interface DispatchOffer {
   id: number;
@@ -27,4 +29,6 @@ export interface DispatchOffer {
   /** @nullable */
   customerConfirmedAt?: string | null;
   notificationStatus?: DispatchOfferNotificationStatus;
+  emailNotificationStatus?: DispatchOfferEmailNotificationStatus;
+  smsNotificationStatus?: DispatchOfferSmsNotificationStatus;
 }

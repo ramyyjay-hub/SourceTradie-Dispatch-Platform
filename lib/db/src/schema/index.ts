@@ -49,6 +49,25 @@ export const notificationStatusEnum = pgEnum("notification_status", [
   "failed",
 ]);
 
+// Paid AI-dispatch lifecycle. Additive and separate from `job_status`
+// (which drives the existing partner-dispatch/SMS-offer flow) so this
+// can be introduced without touching that flow's semantics.
+export const paidFlowStateEnum = pgEnum("paid_flow_state", [
+  "not_started",
+  "serviceable",
+  "manual_review",
+  "unsupported",
+  "checkout_started",
+  "payment_confirmed",
+  "sourcing",
+  "match_ready",
+  "approved",
+  "completed",
+  "sourcing_failed",
+  "refund_pending",
+  "refunded",
+]);
+
 export const appUsersTable = pgTable(
   "app_users",
   {
@@ -98,6 +117,21 @@ export const jobsTable = pgTable(
     sourcingPaused: boolean("sourcing_paused").notNull().default(false),
     classificationOverride: text("classification_override"),
     sourcingOperatorNote: text("sourcing_operator_note"),
+    paidFlowState: paidFlowStateEnum("paid_flow_state")
+      .notNull()
+      .default("not_started"),
+    serviceabilityCheckedAt: timestamp("serviceability_checked_at", {
+      withTimezone: true,
+    }),
+    serviceabilityReason: text("serviceability_reason"),
+    matchedProviderName: text("matched_provider_name"),
+    matchedProviderPhone: text("matched_provider_phone"),
+    matchedProviderPriceMinCents: integer("matched_provider_price_min_cents"),
+    matchedProviderPriceMaxCents: integer("matched_provider_price_max_cents"),
+    matchedProviderEta: text("matched_provider_eta"),
+    matchedProviderNotes: text("matched_provider_notes"),
+    matchedAt: timestamp("matched_at", { withTimezone: true }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -110,6 +144,64 @@ export const jobsTable = pgTable(
     uniqueIndex("jobs_public_status_token_uidx").on(table.publicStatusToken),
     index("jobs_status_idx").on(table.status),
     index("jobs_created_at_idx").on(table.createdAt),
+    index("jobs_paid_flow_state_idx").on(table.paidFlowState),
+  ],
+);
+
+export const jobPaymentsTable = pgTable(
+  "job_payments",
+  {
+    id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => jobsTable.id, { onDelete: "cascade" }),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeRefundId: text("stripe_refund_id"),
+    amountCents: integer("amount_cents").notNull().default(2999),
+    currency: text("currency").notNull().default("aud"),
+    status: text("status").notNull().default("pending"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    testMode: boolean("test_mode").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("job_payments_idempotency_uidx").on(table.idempotencyKey),
+    uniqueIndex("job_payments_checkout_session_uidx")
+      .on(table.stripeCheckoutSessionId)
+      .where(sql`stripe_checkout_session_id IS NOT NULL`),
+    index("job_payments_job_id_idx").on(table.jobId),
+    index("job_payments_status_idx").on(table.status),
+  ],
+);
+
+export const jobPaymentEventsTable = pgTable(
+  "job_payment_events",
+  {
+    id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+    stripeEventId: text("stripe_event_id").notNull(),
+    jobId: integer("job_id").references(() => jobsTable.id, {
+      onDelete: "set null",
+    }),
+    type: text("type").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("job_payment_events_stripe_event_uidx").on(
+      table.stripeEventId,
+    ),
+    index("job_payment_events_job_id_idx").on(table.jobId),
   ],
 );
 

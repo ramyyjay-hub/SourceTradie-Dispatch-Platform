@@ -129,6 +129,15 @@ export type PublicJobStatusApi = {
     confirmedPriceCents: number | null;
     customerConfirmed: boolean;
   } | null;
+  paidFlowState: string;
+  paidMatch: {
+    providerName: string;
+    providerPhone: string | null;
+    priceMinCents: number;
+    priceMaxCents: number;
+    eta: string;
+    notes: string | null;
+  } | null;
 };
 
 export type JobAssessmentApi = {
@@ -1223,6 +1232,20 @@ export class SourceTradieRepository {
             customerConfirmed: Boolean(accepted.customerConfirmedAt),
           }
         : null,
+      paidFlowState: row.paidFlowState,
+      paidMatch:
+        row.paidFlowState === "match_ready" ||
+        row.paidFlowState === "approved" ||
+        row.paidFlowState === "completed"
+          ? {
+              providerName: row.matchedProviderName ?? "",
+              providerPhone: row.matchedProviderPhone ?? null,
+              priceMinCents: row.matchedProviderPriceMinCents ?? 0,
+              priceMaxCents: row.matchedProviderPriceMaxCents ?? 0,
+              eta: row.matchedProviderEta ?? "",
+              notes: row.matchedProviderNotes ?? null,
+            }
+          : null,
     };
   }
 

@@ -9,25 +9,25 @@ export interface HealthStatus {
   status: string;
 }
 
-export type TradeClassification =
-  (typeof TradeClassification)[keyof typeof TradeClassification];
+export type TradeClassification = typeof TradeClassification[keyof typeof TradeClassification];
+
 
 export const TradeClassification = {
-  plumbing: "plumbing",
-  electrical: "electrical",
-  heating_cooling: "heating_cooling",
-  unsure: "unsure",
+  plumbing: 'plumbing',
+  electrical: 'electrical',
+  heating_cooling: 'heating_cooling',
+  unsure: 'unsure',
 } as const;
 
-export type UrgencyClassification =
-  (typeof UrgencyClassification)[keyof typeof UrgencyClassification];
+export type UrgencyClassification = typeof UrgencyClassification[keyof typeof UrgencyClassification];
+
 
 export const UrgencyClassification = {
-  not_urgent: "not_urgent",
-  soon: "soon",
-  today: "today",
-  emergency: "emergency",
-  unsure: "unsure",
+  not_urgent: 'not_urgent',
+  soon: 'soon',
+  today: 'today',
+  emergency: 'emergency',
+  unsure: 'unsure',
 } as const;
 
 export interface PhotoContext {
@@ -36,61 +36,61 @@ export interface PhotoContext {
   count: number;
 }
 
-export type JobIntakeAssessmentDraftConfidence =
-  (typeof JobIntakeAssessmentDraftConfidence)[keyof typeof JobIntakeAssessmentDraftConfidence];
+export type JobIntakeAssessmentDraftConfidence = typeof JobIntakeAssessmentDraftConfidence[keyof typeof JobIntakeAssessmentDraftConfidence];
+
 
 export const JobIntakeAssessmentDraftConfidence = {
-  low: "low",
-  medium: "medium",
-  high: "high",
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
 } as const;
 
-export type JobIntakeAssessmentDraftCodesItem =
-  (typeof JobIntakeAssessmentDraftCodesItem)[keyof typeof JobIntakeAssessmentDraftCodesItem];
+export type JobIntakeAssessmentDraftCodesItem = typeof JobIntakeAssessmentDraftCodesItem[keyof typeof JobIntakeAssessmentDraftCodesItem];
+
 
 export const JobIntakeAssessmentDraftCodesItem = {
-  ROUTING_REVIEW: "ROUTING_REVIEW",
-  URGENCY_REVIEW: "URGENCY_REVIEW",
-  MANUAL_REVIEW_REQUIRED: "MANUAL_REVIEW_REQUIRED",
+  ROUTING_REVIEW: 'ROUTING_REVIEW',
+  URGENCY_REVIEW: 'URGENCY_REVIEW',
+  MANUAL_REVIEW_REQUIRED: 'MANUAL_REVIEW_REQUIRED',
 } as const;
 
 export interface JobIntakeAssessmentDraft {
   tradeClassification: TradeClassification;
   urgencyClassification: UrgencyClassification;
   /**
-   * @maxLength 120
-   * @nullable
-   */
+     * @maxLength 120
+     * @nullable
+     */
   suburb: string | null;
   /**
-   * @maxLength 16
-   * @nullable
-   */
+     * @maxLength 16
+     * @nullable
+     */
   postcode: string | null;
   /**
-   * @maxLength 160
-   * @nullable
-   */
+     * @maxLength 160
+     * @nullable
+     */
   preferredAttendanceTime: string | null;
   /**
-   * @maxLength 500
-   * @nullable
-   */
+     * @maxLength 500
+     * @nullable
+     */
   neutralProblemSummary: string | null;
   /**
-   * @maxLength 120
-   * @nullable
-   */
+     * @maxLength 120
+     * @nullable
+     */
   equipment: string | null;
   /**
-   * @maxLength 120
-   * @nullable
-   */
+     * @maxLength 120
+     * @nullable
+     */
   brand: string | null;
   /**
-   * @maxLength 120
-   * @nullable
-   */
+     * @maxLength 120
+     * @nullable
+     */
   model: string | null;
   photoContext: PhotoContext;
   confidence: JobIntakeAssessmentDraftConfidence;
@@ -108,12 +108,12 @@ export interface JobAssessment {
   createdAt: string;
 }
 
-export type PricingSnapshotKind =
-  (typeof PricingSnapshotKind)[keyof typeof PricingSnapshotKind];
+export type PricingSnapshotKind = typeof PricingSnapshotKind[keyof typeof PricingSnapshotKind];
+
 
 export const PricingSnapshotKind = {
-  total: "total",
-  diagnostic: "diagnostic",
+  total: 'total',
+  diagnostic: 'diagnostic',
 } as const;
 
 export interface PricingSnapshot {
@@ -177,13 +177,12 @@ export interface CustomerConfirmedIntake {
 /**
  * @nullable
  */
-export type AcceptedTradieConfirmedPriceKind =
-  | (typeof AcceptedTradieConfirmedPriceKind)[keyof typeof AcceptedTradieConfirmedPriceKind]
-  | null;
+export type AcceptedTradieConfirmedPriceKind = typeof AcceptedTradieConfirmedPriceKind[keyof typeof AcceptedTradieConfirmedPriceKind] | null;
+
 
 export const AcceptedTradieConfirmedPriceKind = {
-  total: "total",
-  diagnostic: "diagnostic",
+  total: 'total',
+  diagnostic: 'diagnostic',
 } as const;
 
 export interface AcceptedTradie {
@@ -198,6 +197,36 @@ export interface AcceptedTradie {
   customerConfirmed: boolean;
 }
 
+export type PaidFlowState = typeof PaidFlowState[keyof typeof PaidFlowState];
+
+
+export const PaidFlowState = {
+  not_started: 'not_started',
+  serviceable: 'serviceable',
+  manual_review: 'manual_review',
+  unsupported: 'unsupported',
+  checkout_started: 'checkout_started',
+  payment_confirmed: 'payment_confirmed',
+  sourcing: 'sourcing',
+  match_ready: 'match_ready',
+  approved: 'approved',
+  completed: 'completed',
+  sourcing_failed: 'sourcing_failed',
+  refund_pending: 'refund_pending',
+  refunded: 'refunded',
+} as const;
+
+export interface PaidMatch {
+  providerName: string;
+  /** @nullable */
+  providerPhone: string | null;
+  priceMinCents: number;
+  priceMaxCents: number;
+  eta: string;
+  /** @nullable */
+  notes: string | null;
+}
+
 export interface PublicJobStatus {
   reference: string;
   status: string;
@@ -207,6 +236,8 @@ export interface PublicJobStatus {
   assessment?: JobAssessment | null;
   expectedPrice: PricingSnapshot | null;
   acceptedTradie: AcceptedTradie | null;
+  paidFlowState: PaidFlowState;
+  paidMatch: PaidMatch | null;
 }
 
 export interface JobInput {
@@ -227,14 +258,14 @@ export interface JobInput {
 
 export interface PricingPreviewInput {
   /**
-   * @minLength 4
-   * @maxLength 4000
-   */
+     * @minLength 4
+     * @maxLength 4000
+     */
   description: string;
   /**
-   * @minLength 1
-   * @maxLength 120
-   */
+     * @minLength 1
+     * @maxLength 120
+     */
   trade: string;
 }
 
@@ -279,7 +310,33 @@ export interface Partner {
   emergencyJobs?: boolean;
 }
 
+export interface PartnerAttribution {
+  /** @maxLength 100 */
+  utmSource?: string;
+  /** @maxLength 100 */
+  utmMedium?: string;
+  /** @maxLength 100 */
+  utmCampaign?: string;
+}
+
+export type PartnerFunnelEventInputEventType = typeof PartnerFunnelEventInputEventType[keyof typeof PartnerFunnelEventInputEventType];
+
+
+export const PartnerFunnelEventInputEventType = {
+  partner_page_viewed: 'partner_page_viewed',
+  partner_application_started: 'partner_application_started',
+} as const;
+
+export interface PartnerFunnelEventInput {
+  /** @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ */
+  sessionId: string;
+  eventType: PartnerFunnelEventInputEventType;
+  attribution?: PartnerAttribution;
+}
+
 export interface PartnerInput {
+  /** @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ */
+  submissionId: string;
   businessName: string;
   contactName: string;
   abn?: string;
@@ -291,7 +348,33 @@ export interface PartnerInput {
   radiusKm: number;
   services?: string[];
   emergencyJobs?: boolean;
+  /** @pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ */
+  funnelSessionId?: string;
+  attribution?: PartnerAttribution;
 }
+
+export interface PartnerApplicationReceipt {
+  id: number;
+  status: string;
+  submittedAt: string;
+  duplicate: boolean;
+}
+
+export type PartnerApplication = Partner & ({
+  /** @nullable */
+  licence?: string | null;
+  mobile: string;
+  email: string;
+  submittedAt: string;
+  notificationStatus: string;
+  acknowledgementStatus: string;
+  /** @nullable */
+  acquisitionUtmSource?: string | null;
+  /** @nullable */
+  acquisitionUtmMedium?: string | null;
+  /** @nullable */
+  acquisitionUtmCampaign?: string | null;
+});
 
 export interface AvailabilityInput {
   availability: boolean;
@@ -300,13 +383,12 @@ export interface AvailabilityInput {
 /**
  * @nullable
  */
-export type DispatchConfirmedPriceKind =
-  | (typeof DispatchConfirmedPriceKind)[keyof typeof DispatchConfirmedPriceKind]
-  | null;
+export type DispatchConfirmedPriceKind = typeof DispatchConfirmedPriceKind[keyof typeof DispatchConfirmedPriceKind] | null;
+
 
 export const DispatchConfirmedPriceKind = {
-  total: "total",
-  diagnostic: "diagnostic",
+  total: 'total',
+  diagnostic: 'diagnostic',
 } as const;
 
 export interface Dispatch {
@@ -327,12 +409,12 @@ export interface Dispatch {
   customerConfirmedAt?: string | null;
 }
 
-export type DispatchDecisionInputConfirmedPriceKind =
-  (typeof DispatchDecisionInputConfirmedPriceKind)[keyof typeof DispatchDecisionInputConfirmedPriceKind];
+export type DispatchDecisionInputConfirmedPriceKind = typeof DispatchDecisionInputConfirmedPriceKind[keyof typeof DispatchDecisionInputConfirmedPriceKind];
+
 
 export const DispatchDecisionInputConfirmedPriceKind = {
-  total: "total",
-  diagnostic: "diagnostic",
+  total: 'total',
+  diagnostic: 'diagnostic',
 } as const;
 
 export interface DispatchDecisionInput {
@@ -353,23 +435,42 @@ export interface DispatchOfferInput {
 /**
  * @nullable
  */
-export type DispatchOfferConfirmedPriceKind =
-  | (typeof DispatchOfferConfirmedPriceKind)[keyof typeof DispatchOfferConfirmedPriceKind]
-  | null;
+export type DispatchOfferConfirmedPriceKind = typeof DispatchOfferConfirmedPriceKind[keyof typeof DispatchOfferConfirmedPriceKind] | null;
+
 
 export const DispatchOfferConfirmedPriceKind = {
-  total: "total",
-  diagnostic: "diagnostic",
+  total: 'total',
+  diagnostic: 'diagnostic',
 } as const;
 
-export type DispatchOfferNotificationStatus =
-  (typeof DispatchOfferNotificationStatus)[keyof typeof DispatchOfferNotificationStatus];
+export type DispatchOfferNotificationStatus = typeof DispatchOfferNotificationStatus[keyof typeof DispatchOfferNotificationStatus];
+
 
 export const DispatchOfferNotificationStatus = {
-  pending: "pending",
-  sent: "sent",
-  delivered: "delivered",
-  failed: "failed",
+  pending: 'pending',
+  sent: 'sent',
+  delivered: 'delivered',
+  failed: 'failed',
+} as const;
+
+export type DispatchOfferEmailNotificationStatus = typeof DispatchOfferEmailNotificationStatus[keyof typeof DispatchOfferEmailNotificationStatus];
+
+
+export const DispatchOfferEmailNotificationStatus = {
+  pending: 'pending',
+  sent: 'sent',
+  delivered: 'delivered',
+  failed: 'failed',
+} as const;
+
+export type DispatchOfferSmsNotificationStatus = typeof DispatchOfferSmsNotificationStatus[keyof typeof DispatchOfferSmsNotificationStatus];
+
+
+export const DispatchOfferSmsNotificationStatus = {
+  pending: 'pending',
+  sent: 'sent',
+  delivered: 'delivered',
+  failed: 'failed',
 } as const;
 
 export interface DispatchOffer {
@@ -391,6 +492,8 @@ export interface DispatchOffer {
   /** @nullable */
   customerConfirmedAt?: string | null;
   notificationStatus?: DispatchOfferNotificationStatus;
+  emailNotificationStatus?: DispatchOfferEmailNotificationStatus;
+  smsNotificationStatus?: DispatchOfferSmsNotificationStatus;
 }
 
 export interface JobPhoto {
@@ -434,6 +537,41 @@ export interface PartnerRecommendation {
   disqualifications: string[];
 }
 
+export interface PartnerAcquisitionFunnelCounts {
+  views: number;
+  starts: number;
+  submits: number;
+  /**
+     * starts / views, or null when there are no views
+     * @nullable
+     */
+  viewToStartRate: number | null;
+  /**
+     * submits / starts, or null when there are no starts
+     * @nullable
+     */
+  startToSubmitRate: number | null;
+  /**
+     * submits / views, or null when there are no views
+     * @nullable
+     */
+  viewToSubmitRate: number | null;
+}
+
+export type PartnerAcquisitionBreakdownRow = PartnerAcquisitionFunnelCounts & ({
+  /** @nullable */
+  utmSource?: string | null;
+  /** @nullable */
+  utmMedium?: string | null;
+  /** @nullable */
+  utmCampaign?: string | null;
+});
+
+export interface PartnerAcquisitionSummary {
+  totals: PartnerAcquisitionFunnelCounts;
+  breakdown: PartnerAcquisitionBreakdownRow[];
+}
+
 export interface AdminSummary {
   newRequests: number;
   awaitingDispatch: number;
@@ -446,27 +584,137 @@ export interface AdminSummary {
   completedJobs: number;
 }
 
+export type ServiceabilityCheckResultOutcome = typeof ServiceabilityCheckResultOutcome[keyof typeof ServiceabilityCheckResultOutcome];
+
+
+export const ServiceabilityCheckResultOutcome = {
+  serviceable: 'serviceable',
+  manual_review: 'manual_review',
+  unsupported: 'unsupported',
+} as const;
+
+export interface ServiceabilityCheckResult {
+  outcome: ServiceabilityCheckResultOutcome;
+  inferredTrade: string;
+  candidateCount: number;
+  reason: string;
+}
+
+export interface CheckoutInput {
+  /** @minLength 1 */
+  successUrl: string;
+  /** @minLength 1 */
+  cancelUrl: string;
+}
+
+export interface CheckoutSession {
+  checkoutUrl: string;
+  testMode: boolean;
+}
+
+export interface ApproveMatchInput {
+  /** @minLength 1 */
+  token: string;
+}
+
+export interface OkResponse {
+  ok: true;
+}
+
+export interface ManualMatchInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  providerName: string;
+  /** @maxLength 40 */
+  providerPhone?: string;
+  /** @minimum 0 */
+  priceMinCents: number;
+  /** @minimum 0 */
+  priceMaxCents: number;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  eta: string;
+  /** @maxLength 2000 */
+  notes?: string;
+}
+
+export type MarkSourcingFailedResultRefund = typeof MarkSourcingFailedResultRefund[keyof typeof MarkSourcingFailedResultRefund];
+
+
+export const MarkSourcingFailedResultRefund = {
+  initiated: 'initiated',
+  failed: 'failed',
+  no_payment_on_file: 'no_payment_on_file',
+} as const;
+
+export interface MarkSourcingFailedResult {
+  ok: true;
+  refund: MarkSourcingFailedResultRefund;
+}
+
+export interface PaidJob {
+  id: number;
+  reference: string;
+  description: string;
+  trade: string;
+  suburb: string;
+  postcode: string;
+  urgency: string;
+  preferredTime: string;
+  status: string;
+  customerName: string;
+  /** @nullable */
+  customerPhone?: string | null;
+  /** @nullable */
+  customerEmail?: string | null;
+  /** @nullable */
+  serviceAddressLine1?: string | null;
+  /** @nullable */
+  serviceAddressLine2?: string | null;
+  paidFlowState: PaidFlowState;
+  /** @nullable */
+  serviceabilityReason?: string | null;
+  /** @nullable */
+  matchedProviderName?: string | null;
+  /** @nullable */
+  matchedProviderPhone?: string | null;
+  /** @nullable */
+  matchedProviderPriceMinCents?: number | null;
+  /** @nullable */
+  matchedProviderPriceMaxCents?: number | null;
+  /** @nullable */
+  matchedProviderEta?: string | null;
+  /** @nullable */
+  matchedProviderNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type JobStatusTokenParameter = string;
 
 export type GetJobParams = {
-  /**
-   * @minLength 16
-   */
-  token: JobStatusTokenParameter;
+/**
+ * @minLength 16
+ */
+token: JobStatusTokenParameter;
 };
 
 export type CorrectJobIntakeParams = {
-  /**
-   * @minLength 16
-   */
-  token: JobStatusTokenParameter;
+/**
+ * @minLength 16
+ */
+token: JobStatusTokenParameter;
 };
 
 export type UploadJobPhotosParams = {
-  /**
-   * @minLength 16
-   */
-  token: JobStatusTokenParameter;
+/**
+ * @minLength 16
+ */
+token: JobStatusTokenParameter;
 };
 
 export type UploadJobPhotosBody = {
@@ -479,12 +727,13 @@ export type UploadJobPhotos201 = {
 };
 
 export type ConfirmDispatchParams = {
-  /**
-   * @minLength 16
-   */
-  token: JobStatusTokenParameter;
+/**
+ * @minLength 16
+ */
+token: JobStatusTokenParameter;
 };
 
 export type ListApprovedPartnersParams = {
-  trade?: string;
+trade?: string;
 };
+

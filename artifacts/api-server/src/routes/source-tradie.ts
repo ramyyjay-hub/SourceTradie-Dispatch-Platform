@@ -18,6 +18,7 @@ import type { SmsProvider } from "../lib/sms-provider";
 import { matchMelbournePricing } from "../lib/pricing";
 import { requireAuth } from "../middlewares/auth";
 import { requireAdmin, requirePartnerOrAdmin } from "../middlewares/authorize";
+import { logger } from "../lib/logger";
 import { createFixedWindowRateLimit } from "../middlewares/rate-limit";
 import {
   createJobPhotoStorage,
@@ -28,6 +29,7 @@ import {
   sanitizeJobPhoto,
   type JobPhotoStorage,
 } from "../lib/job-photo-storage";
+import { PaidDispatchRepository } from "../lib/paid-dispatch-repository";
 
 type DbLike = typeof WorkspaceDb;
 
@@ -39,6 +41,28 @@ const CreateDispatchOfferBody = z.object({
 
 const DispatchOfferIdParams = z.object({
   id: z.coerce.number().int().positive(),
+});
+
+const JobIdParams = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+const StartCheckoutBody = z.object({
+  successUrl: z.string().url(),
+  cancelUrl: z.string().url(),
+});
+
+const ApproveMatchBody = z.object({
+  token: z.string().min(1),
+});
+
+const RecordManualMatchBody = z.object({
+  providerName: z.string().trim().min(1).max(200),
+  providerPhone: z.string().trim().max(40).optional(),
+  priceMinCents: z.coerce.number().int().nonnegative(),
+  priceMaxCents: z.coerce.number().int().nonnegative(),
+  eta: z.string().trim().min(1).max(200),
+  notes: z.string().trim().max(2000).optional(),
 });
 
 const DispatchDecisionBody = z.object({
@@ -176,6 +200,11 @@ export function createSourceTradieRouter(
     options.notificationProvider,
     options.smsProvider,
   );
+  const paidDispatchRepository = new PaidDispatchRepository(
+    database,
+    undefined,
+    options.notificationProvider,
+  );
   const authRequired = requireAuth(repository, options.tokenVerifier);
   const publicReadRateLimit = createFixedWindowRateLimit({
     scope: "public-read",
@@ -231,15 +260,26 @@ export function createSourceTradieRouter(
         .json({ error: "Please complete the required job details." });
     }
 
-    const job = await repository.createJob(parsed.data);
-    return res.status(201).json({
-      id: job.id,
-      reference: job.reference,
-      status: job.status,
-      createdAt: job.createdAt,
-      statusAccessToken: job.statusAccessToken,
-      statusAccessUrl: `/request/${job.id}?token=${job.statusAccessToken}`,
-    });
+    try {
+      const job = await repository.createJob(parsed.data);
+      return res.status(201).json({
+        id: job.id,
+        reference: job.reference,
+        status: job.status,
+        createdAt: job.createdAt,
+        statusAccessToken: job.statusAccessToken,
+        statusAccessUrl: `/request/${job.id}?token=${job.statusAccessToken}`,
+      });
+    } catch (err) {
+      logger.error(
+        {
+          err,
+          cause: err instanceof Error ? err.cause : undefined,
+        },
+        "Failed to create job",
+      );
+      return res.status(500).json({ error: "Failed to create job." });
+    }
   });
 
   router.post("/homeowner-funnel/events", publicReadRateLimit, async (req, res) => {
@@ -908,7 +948,151 @@ export function createSourceTradieRouter(
     },
   );
 
+  // --- Paid AI-dispatch (TEST-mode Stripe sourcing fee) -----------------
+  // Hard boundary: nothing in this router ever enables live Stripe or real
+  // SMS. Stripe is only ever constructed against STRIPE_SECRET_KEY, and
+  // StripePaymentProvider refuses to operate unless that key is a
+  // sk_test_ key (see lib/stripe-provider.ts).
+
+  router.post(
+    "/jobs/:id/serviceability",
+    publicWriteRateLimit,
+    async (req, res) => {
+      const parsed = JobIdParams.safeParse(req.params);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid job identifier." });
+      }
+      const result = await paidDispatchRepository.runServiceabilityCheck(
+        parsed.data.id,
+      );
+      if (!result) {
+        return res.status(404).json({ error: "Job not found." });
+      }
+      return res.json(result);
+    },
+  );
+
+  router.post(
+    "/jobs/:id/checkout",
+    publicWriteRateLimit,
+    async (req, res) => {
+      const idParsed = JobIdParams.safeParse(req.params);
+      const bodyParsed = StartCheckoutBody.safeParse(req.body);
+      if (!idParsed.success || !bodyParsed.success) {
+        return res.status(400).json({ error: "Invalid checkout request." });
+      }
+      const result = await paidDispatchRepository.startCheckout({
+        jobId: idParsed.data.id,
+        successUrl: bodyParsed.data.successUrl,
+        cancelUrl: bodyParsed.data.cancelUrl,
+      });
+      if (!result.ok) {
+        const status = result.errorCode === "job_not_found" ? 404 : 409;
+        return res.status(status).json({ error: result.errorCode });
+      }
+      return res.json({
+        checkoutUrl: result.checkoutUrl,
+        testMode: result.testMode,
+      });
+    },
+  );
+
+  router.post(
+    "/jobs/:id/approve-match",
+    publicWriteRateLimit,
+    async (req, res) => {
+      const idParsed = JobIdParams.safeParse(req.params);
+      const bodyParsed = ApproveMatchBody.safeParse(req.body);
+      if (!idParsed.success || !bodyParsed.success) {
+        return res.status(400).json({ error: "Invalid approval request." });
+      }
+      const result = await paidDispatchRepository.approveMatch(
+        idParsed.data.id,
+        bodyParsed.data.token,
+      );
+      if (!result.ok) {
+        const status = result.errorCode === "not_found" ? 404 : 409;
+        return res.status(status).json({ error: result.errorCode });
+      }
+      return res.json({ ok: true });
+    },
+  );
+
+  router.get(
+    "/admin/paid-jobs",
+    authRequired,
+    requireAdmin,
+    async (_req, res) => {
+      const jobs = await paidDispatchRepository.listPaidJobsForOperator();
+      return res.json(jobs);
+    },
+  );
+
+  router.post(
+    "/admin/jobs/:id/manual-match",
+    authRequired,
+    requireAdmin,
+    async (req, res) => {
+      const idParsed = JobIdParams.safeParse(req.params);
+      const bodyParsed = RecordManualMatchBody.safeParse(req.body);
+      if (!idParsed.success || !bodyParsed.success) {
+        return res.status(400).json({ error: "Invalid manual match payload." });
+      }
+      const result = await paidDispatchRepository.recordManualMatch({
+        jobId: idParsed.data.id,
+        ...bodyParsed.data,
+      });
+      if (!result.ok) {
+        const status = result.errorCode === "job_not_found" ? 404 : 409;
+        return res.status(status).json({ error: result.errorCode });
+      }
+      return res.json({ ok: true });
+    },
+  );
+
+  router.post(
+    "/admin/jobs/:id/mark-sourcing-failed",
+    authRequired,
+    requireAdmin,
+    async (req, res) => {
+      const idParsed = JobIdParams.safeParse(req.params);
+      if (!idParsed.success) {
+        return res.status(400).json({ error: "Invalid job identifier." });
+      }
+      const result = await paidDispatchRepository.markSourcingFailed(
+        idParsed.data.id,
+      );
+      if (!result.ok) {
+        const status = result.errorCode === "job_not_found" ? 404 : 409;
+        return res.status(status).json({ error: result.errorCode });
+      }
+      return res.json({ ok: true, refund: result.refund });
+    },
+  );
+
+  router.post(
+    "/admin/jobs/:id/mark-completed",
+    authRequired,
+    requireAdmin,
+    async (req, res) => {
+      const idParsed = JobIdParams.safeParse(req.params);
+      if (!idParsed.success) {
+        return res.status(400).json({ error: "Invalid job identifier." });
+      }
+      const result = await paidDispatchRepository.markCompleted(
+        idParsed.data.id,
+      );
+      if (!result.ok) {
+        const status = result.errorCode === "job_not_found" ? 404 : 409;
+        return res.status(status).json({ error: result.errorCode });
+      }
+      return res.json({ ok: true });
+    },
+  );
+
   return router;
 }
+
+export { PaidDispatchRepository };
 
 export default createSourceTradieRouter(db);

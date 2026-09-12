@@ -5,13 +5,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   getGetPartnerRecommendationsQueryKey,
+  getListPaidJobsQueryKey,
   useCreateDispatchOffer,
   useGetAdminSummary,
   useGetPartnerRecommendations,
   useListJobs,
+  useListPaidJobs,
   useListPartners,
+  useMarkJobCompleted,
+  useMarkSourcingFailed,
+  useRecordManualMatch,
 } from "@workspace/api-client-react";
-import type { Job, JobAssessment } from "@workspace/api-client-react";
+import type { Job, JobAssessment, PaidJob } from "@workspace/api-client-react";
 import {
   AppFrame,
   EmptyState,
@@ -74,6 +79,7 @@ export default function AdminPage() {
   const summary = useGetAdminSummary();
   const jobs = useListJobs();
   const partners = useListPartners();
+  const paidJobs = useListPaidJobs();
   const applications = useQuery({
     queryKey: ["admin", "partner-applications"],
     queryFn: () =>
@@ -106,6 +112,7 @@ export default function AdminPage() {
     applications.refetch();
     acquisitionSummary.refetch();
     candidates.refetch();
+    paidJobs.refetch();
   };
   const nav = (
     <div className="space-y-2">
@@ -169,6 +176,11 @@ export default function AdminPage() {
             />
           </div>
         )}
+        <PaidJobsPanel
+          jobs={paidJobs.data ?? []}
+          loading={paidJobs.isLoading}
+          isError={paidJobs.isError}
+        />
         <CandidateProviderPanel
           candidates={candidates.data ?? []}
           loading={candidates.isLoading}
@@ -613,6 +625,297 @@ function CandidateProviderPanel({
         </div>
       )}
     </section>
+  );
+}
+
+function formatPaidJobPrice(cents: number): string {
+  return new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: "AUD",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+function PaidJobsPanel({
+  jobs,
+  loading,
+  isError,
+}: {
+  jobs: PaidJob[];
+  loading: boolean;
+  isError: boolean;
+}) {
+  return (
+    <section className="mt-10" aria-labelledby="paid-dispatch-jobs">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <SectionLabel>Paid AI-dispatch (TEST mode)</SectionLabel>
+          <h2 id="paid-dispatch-jobs" className="mt-1 text-2xl font-bold">
+            Paid jobs
+          </h2>
+        </div>
+        <span className="font-mono-ui text-xs text-[hsl(var(--muted-foreground))]">
+          {jobs.length} in the paid flow
+        </span>
+      </div>
+      {loading ? (
+        <Skeleton className="mt-4 h-28" />
+      ) : isError ? (
+        <EmptyState
+          title="Paid jobs unavailable"
+          detail="Refresh to try again."
+        />
+      ) : jobs.length ? (
+        <div className="mt-4 space-y-3">
+          {jobs.map((job) => (
+            <PaidJobCard key={job.id} job={job} />
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-xl border border-dashed p-5 text-sm text-[hsl(var(--muted-foreground))]">
+          No jobs have entered paid AI-dispatch yet.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function PaidJobCard({ job }: { job: PaidJob }) {
+  const queryClient = useQueryClient();
+  const [showMatchForm, setShowMatchForm] = useState(false);
+  const [match, setMatch] = useState({
+    providerName: "",
+    providerPhone: "",
+    priceMinCents: "",
+    priceMaxCents: "",
+    eta: "",
+    notes: "",
+  });
+  const [message, setMessage] = useState("");
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: getListPaidJobsQueryKey() });
+
+  const recordManualMatch = useRecordManualMatch({
+    mutation: {
+      onSuccess: () => {
+        setMessage("Manual match recorded. Customer can now approve it.");
+        setShowMatchForm(false);
+        invalidate();
+      },
+      onError: () => setMessage("Could not save the match. Check the values."),
+    },
+  });
+  const markSourcingFailed = useMarkSourcingFailed({
+    mutation: {
+      onSuccess: (result) =>
+        setMessage(
+          result.refund === "initiated"
+            ? "Marked failed. TEST-mode refund initiated."
+            : result.refund === "no_payment_on_file"
+              ? "Marked failed. No payment was on file to refund."
+              : "Marked failed. Refund attempt failed -- check Stripe.",
+        ),
+      onError: () => setMessage("Could not mark sourcing failed."),
+    },
+  });
+  const markCompleted = useMarkJobCompleted({
+    mutation: {
+      onSuccess: () => {
+        setMessage("Job marked completed.");
+        invalidate();
+      },
+      onError: () => setMessage("Could not mark completed."),
+    },
+  });
+
+  const canMatch =
+    job.paidFlowState === "sourcing" || job.paidFlowState === "match_ready";
+  const canMarkFailed = canMatch;
+  const canComplete = job.paidFlowState === "approved";
+
+  const submitMatch = () => {
+    const priceMinCents = Number(match.priceMinCents);
+    const priceMaxCents = Number(match.priceMaxCents);
+    if (
+      !match.providerName.trim() ||
+      !match.eta.trim() ||
+      !Number.isFinite(priceMinCents) ||
+      !Number.isFinite(priceMaxCents)
+    ) {
+      setMessage("Fill in provider name, price range and ETA.");
+      return;
+    }
+    recordManualMatch.mutate({
+      id: job.id,
+      data: {
+        providerName: match.providerName.trim(),
+        providerPhone: match.providerPhone.trim() || undefined,
+        priceMinCents,
+        priceMaxCents,
+        eta: match.eta.trim(),
+        notes: match.notes.trim() || undefined,
+      },
+    });
+  };
+
+  return (
+    <article
+      className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5"
+      data-testid={`row-paid-job-${job.id}`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-mono-ui text-[10px] text-[hsl(var(--secondary))]">
+            {job.reference}
+          </p>
+          <h3 className="mt-1 text-lg font-bold">{job.description}</h3>
+          <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+            {job.trade} · {job.suburb} {job.postcode} · {job.urgency}
+          </p>
+        </div>
+        <StatusPill status={job.paidFlowState} />
+      </div>
+
+      <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+        <p>{job.customerName}</p>
+        {job.customerPhone && (
+          <a href={`tel:${job.customerPhone}`} className="font-semibold">
+            {job.customerPhone}
+          </a>
+        )}
+      </div>
+
+      {job.matchedProviderName && (
+        <div className="mt-3 rounded-lg bg-[hsl(var(--muted)/.55)] px-3 py-2 text-xs">
+          Matched: <strong>{job.matchedProviderName}</strong>
+          {job.matchedProviderPriceMinCents != null &&
+            job.matchedProviderPriceMaxCents != null &&
+            ` · ${formatPaidJobPrice(job.matchedProviderPriceMinCents)}–${formatPaidJobPrice(job.matchedProviderPriceMaxCents)}`}
+          {job.matchedProviderEta && ` · ETA ${job.matchedProviderEta}`}
+        </div>
+      )}
+
+      {(canMatch || canComplete) && (
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-[hsl(var(--border))] pt-3">
+          {canMatch && (
+            <button
+              className="btn-quiet border text-xs"
+              onClick={() => setShowMatchForm((value) => !value)}
+              data-testid={`button-toggle-match-${job.id}`}
+            >
+              {showMatchForm ? "Cancel" : "Enter manual match"}
+            </button>
+          )}
+          {canMatch && (
+            <button
+              className="btn-quiet border text-xs"
+              disabled={markSourcingFailed.isPending}
+              onClick={() => markSourcingFailed.mutate({ id: job.id })}
+              data-testid={`button-mark-sourcing-failed-${job.id}`}
+            >
+              {markSourcingFailed.isPending
+                ? "Marking failed"
+                : "Mark sourcing failed (refund)"}
+            </button>
+          )}
+          {canComplete && (
+            <button
+              className="btn-accent text-xs"
+              disabled={markCompleted.isPending}
+              onClick={() => markCompleted.mutate({ id: job.id })}
+              data-testid={`button-mark-completed-${job.id}`}
+            >
+              {markCompleted.isPending ? "Saving" : "Mark completed"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {showMatchForm && (
+        <div className="mt-3 grid gap-2 rounded-xl border border-[hsl(var(--border))] p-3 sm:grid-cols-2">
+          <input
+            className="field"
+            placeholder="Provider business name"
+            value={match.providerName}
+            onChange={(event) =>
+              setMatch((current) => ({
+                ...current,
+                providerName: event.target.value,
+              }))
+            }
+          />
+          <input
+            className="field"
+            placeholder="Provider phone (optional)"
+            value={match.providerPhone}
+            onChange={(event) =>
+              setMatch((current) => ({
+                ...current,
+                providerPhone: event.target.value,
+              }))
+            }
+          />
+          <input
+            className="field"
+            placeholder="Price min (cents)"
+            inputMode="numeric"
+            value={match.priceMinCents}
+            onChange={(event) =>
+              setMatch((current) => ({
+                ...current,
+                priceMinCents: event.target.value,
+              }))
+            }
+          />
+          <input
+            className="field"
+            placeholder="Price max (cents)"
+            inputMode="numeric"
+            value={match.priceMaxCents}
+            onChange={(event) =>
+              setMatch((current) => ({
+                ...current,
+                priceMaxCents: event.target.value,
+              }))
+            }
+          />
+          <input
+            className="field sm:col-span-2"
+            placeholder="ETA (e.g. Today 3-5pm)"
+            value={match.eta}
+            onChange={(event) =>
+              setMatch((current) => ({ ...current, eta: event.target.value }))
+            }
+          />
+          <textarea
+            className="field sm:col-span-2"
+            placeholder="Notes (optional)"
+            value={match.notes}
+            onChange={(event) =>
+              setMatch((current) => ({
+                ...current,
+                notes: event.target.value,
+              }))
+            }
+          />
+          <button
+            className="btn-accent sm:col-span-2 sm:w-fit"
+            disabled={recordManualMatch.isPending}
+            onClick={submitMatch}
+            data-testid={`button-save-match-${job.id}`}
+          >
+            {recordManualMatch.isPending ? "Saving" : "Save match"}
+          </button>
+        </div>
+      )}
+
+      {message && (
+        <p className="mt-3 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
+          {message}
+        </p>
+      )}
+    </article>
   );
 }
 
