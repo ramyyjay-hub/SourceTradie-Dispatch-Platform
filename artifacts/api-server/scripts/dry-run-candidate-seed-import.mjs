@@ -203,39 +203,104 @@ for (const row of normalizedRows) {
   }
 }
 
-// ---- 5. Deduplicate by normalized business name + phone/domain ------------
+// ---- 5. Deduplicate provider IDENTITIES (not rows) -------------------------
+//
+// Strongest evidence first: normalized phone, then website/domain, then
+// normalized business name + at least one overlapping zone (never name
+// alone -- two different businesses can share a name, and two branches of
+// one business can legitimately serve different, non-overlapping areas).
+// Union-find over rows, so evidence chains transitively (A~B by phone,
+// B~C by domain => A, B, C are one identity).
 
-const groups = new Map();
-for (const row of candidates) {
-  const key = `${normalizeName(row.businessName)}|${normalizePhoneDigits(row.phone) || domainOf(row.website) || ""}`;
-  if (!groups.has(key)) groups.set(key, []);
-  groups.get(key).push(row);
+class UnionFind {
+  constructor(n) {
+    this.parent = Array.from({ length: n }, (_, i) => i);
+  }
+  find(i) {
+    while (this.parent[i] !== i) {
+      this.parent[i] = this.parent[this.parent[i]];
+      i = this.parent[i];
+    }
+    return i;
+  }
+  union(i, j) {
+    const ri = this.find(i);
+    const rj = this.find(j);
+    if (ri !== rj) this.parent[ri] = rj;
+  }
 }
+
+const uf = new UnionFind(candidates.length);
+const phoneIndex = new Map();
+const domainIndex = new Map();
+const nameIndex = new Map();
+
+candidates.forEach((row, i) => {
+  const phoneKey = normalizePhoneDigits(row.phone);
+  const domainKey = domainOf(row.website);
+  const nameKey = normalizeName(row.businessName);
+
+  if (phoneKey) {
+    if (phoneIndex.has(phoneKey)) uf.union(i, phoneIndex.get(phoneKey));
+    else phoneIndex.set(phoneKey, i);
+  }
+  if (domainKey) {
+    if (domainIndex.has(domainKey)) uf.union(i, domainIndex.get(domainKey));
+    else domainIndex.set(domainKey, i);
+  }
+  if (nameKey) {
+    const sameNameRows = nameIndex.get(nameKey) ?? [];
+    for (const j of sameNameRows) {
+      const sharesZone = row.zones.some((z) => candidates[j].zones.includes(z));
+      if (sharesZone) uf.union(i, j);
+    }
+    nameIndex.set(nameKey, [...sameNameRows, i]);
+  }
+});
+
+const clusters = new Map();
+candidates.forEach((row, i) => {
+  const root = uf.find(i);
+  if (!clusters.has(root)) clusters.set(root, []);
+  clusters.get(root).push(row);
+});
 
 const merged = [];
 let duplicateRowCount = 0;
-for (const group of groups.values()) {
+for (const group of clusters.values()) {
   if (group.length > 1) duplicateRowCount += group.length - 1;
-  const primary = group[0];
-  const otherCategories = [...new Set(group.slice(1).map((r) => r.category))].filter(
-    (c) => c !== primary.category,
+  // Primary row: prefer one with a phone, then one with a website, else first-seen.
+  const primary =
+    group.find((r) => normalizePhoneDigits(r.phone)) ??
+    group.find((r) => domainOf(r.website)) ??
+    group[0];
+  const alsoKnownAs = [...new Set(group.map((r) => r.businessName))].filter(
+    (n) => n !== primary.businessName,
   );
+  // Every genuine top-level trade becomes its own capability -- never
+  // folded into subServices, which this seed data doesn't actually supply.
+  const capabilities = [...new Set(group.map((r) => r.category))];
   const allZones = [...new Set(group.flatMap((r) => r.zones))];
+  const licenceDetailsByTrade = [...new Set(group.map((r) => `${r.category}: ${r.licenceDetails ?? "n/a"}`))];
   merged.push({
     businessName: primary.businessName,
-    trade: primary.category,
-    subServices: otherCategories,
+    alsoKnownAs,
+    capabilities,
+    subServices: [], // this seed data has no genuine sub-service granularity
     zones: allZones,
-    phone: primary.phone,
-    website: primary.website || null,
+    phone: group.find((r) => normalizePhoneDigits(r.phone))?.phone ?? primary.phone,
+    website: group.find((r) => r.website)?.website || null,
     afterHoursAvailable: group.some((r) => r.afterHoursAvailable),
-    licenceDetails: primary.licenceDetails,
+    licenceDetails: licenceDetailsByTrade.join(" | "),
     sourceUrl: primary.sourceUrl,
     sourceRows: group.map((r) => r.rowNumber),
   });
 }
 
-// ---- 6. Coverage summary (launch trades only) ------------------------------
+const multiTradeProviders = merged.filter((c) => c.capabilities.length > 1);
+const totalCapabilityRows = merged.reduce((sum, c) => sum + c.capabilities.length, 0);
+
+// ---- 6. Coverage summary (launch trades only, via capability rows) --------
 
 function isLaunchTrade(trade) {
   return SUPPORTED_LAUNCH_TRADES.includes(trade);
@@ -243,10 +308,12 @@ function isLaunchTrade(trade) {
 
 const coverage = new Map();
 for (const c of merged) {
-  if (!isLaunchTrade(c.trade)) continue;
-  for (const zone of c.zones) {
-    const key = `${c.trade}|${zone}`;
-    coverage.set(key, (coverage.get(key) ?? 0) + 1);
+  for (const trade of c.capabilities) {
+    if (!isLaunchTrade(trade)) continue;
+    for (const zone of c.zones) {
+      const key = `${trade}|${zone}`;
+      coverage.set(key, (coverage.get(key) ?? 0) + 1);
+    }
   }
 }
 
@@ -265,35 +332,51 @@ for (const trade of SUPPORTED_LAUNCH_TRADES) {
 
 // ---- 7. Report --------------------------------------------------------------
 
+const missingPhoneCount = normalizedRows.filter((r) => r.missingPhone).length;
+const missingSourceUrlCount = normalizedRows.filter((r) => r.missingSourceUrl).length;
+
 console.log("=== SEED IMPORT DRY RUN ===");
 console.log(`Source file: ${inputPath}`);
-console.log(`Total rows (Providers sheet, excl. header): ${dataRows.length}`);
-console.log(`Accepted (validated, pre-dedup): ${candidates.length}`);
-console.log(`Rejected: ${rejected.length}`);
+console.log(`Source rows: ${dataRows.length}`);
+console.log(`Accepted rows (validated, pre-dedup): ${candidates.length}`);
+console.log(`Rejected rows: ${rejected.length}`);
+console.log(`  of which missing phone: ${missingPhoneCount}`);
+console.log(`  of which missing source URL: ${missingSourceUrlCount}`);
 console.log(`Duplicate rows merged away: ${duplicateRowCount}`);
-console.log(`Final candidate records to insert: ${merged.length}`);
+console.log(`Accepted provider identities (post-dedup): ${merged.length}`);
+console.log(`Capability rows to create: ${totalCapabilityRows}`);
+console.log(`Providers with >1 top-level trade: ${multiTradeProviders.length}`);
 console.log();
 
 if (rejected.length) {
-  console.log("--- Rejected rows ---");
+  console.log("--- Rejected rows (exact reasons) ---");
   for (const r of rejected) {
     console.log(`  row ${r.row} (${r.business || "unnamed"}): ${r.reasons.join(", ")}`);
   }
   console.log();
 }
 
-const dupGroups = [...groups.values()].filter((g) => g.length > 1);
+const dupGroups = [...clusters.values()].filter((g) => g.length > 1);
 if (dupGroups.length) {
-  console.log("--- Duplicate groups merged ---");
+  console.log("--- Duplicate identities merged ---");
   for (const g of dupGroups) {
+    const names = [...new Set(g.map((r) => r.businessName))];
     console.log(
-      `  "${g[0].businessName}" (${g[0].phone}): rows ${g.map((r) => r.rowNumber).join(", ")} -> categories [${[...new Set(g.map((r) => r.category))].join(", ")}]`,
+      `  ${names.length > 1 ? names.join(" / ") : `"${names[0]}"`}: rows ${g.map((r) => r.rowNumber).join(", ")} -> capabilities [${[...new Set(g.map((r) => r.category))].join(", ")}]`,
     );
   }
   console.log();
 }
 
-console.log("--- Trade x zone coverage (launch trades only, target 10/cell) ---");
+if (multiTradeProviders.length) {
+  console.log("--- Providers with multiple top-level trade capabilities ---");
+  for (const p of multiTradeProviders) {
+    console.log(`  "${p.businessName}": ${p.capabilities.join(", ")}`);
+  }
+  console.log();
+}
+
+console.log("--- Trade x zone coverage via capability rows (launch trades only, target 10/cell) ---");
 console.log(
   ["Trade".padEnd(34), ...MELBOURNE_LAUNCH_ZONES.map((z) => z.padEnd(14)), "Total"].join(""),
 );
@@ -314,7 +397,9 @@ console.log("--- Top supply gaps (launch trades, ranked by total coverage, ascen
   .forEach((row, i) => console.log(`  ${i + 1}. ${row.trade}: ${row.total} total candidates`));
 console.log();
 
-const nonLaunchTrades = [...new Set(merged.map((c) => c.trade).filter((t) => !isLaunchTrade(t)))];
+const nonLaunchTrades = [
+  ...new Set(merged.flatMap((c) => c.capabilities).filter((t) => !isLaunchTrade(t))),
+];
 if (nonLaunchTrades.length) {
   console.log(
     `--- Non-launch-scope trades imported as data, excluded from the coverage grid (later expansion): ${nonLaunchTrades.join(", ")} ---`,
