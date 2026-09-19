@@ -10,7 +10,8 @@ import {
   notificationsTable,
 } from "@workspace/db/schema";
 import type { db as WorkspaceDb } from "@workspace/db";
-import { assessServiceability, type ServiceabilityResult } from "./serviceability";
+import { assessServiceability, inferTrade, type ServiceabilityResult } from "./serviceability";
+import { rankCandidates, type CandidateForRanking } from "./provider-sourcing";
 import {
   createPaymentProvider,
   SOURCING_FEE_AMOUNT_CENTS,
@@ -73,15 +74,10 @@ export class PaidDispatchRepository {
       .onConflictDoNothing({ target: notificationsTable.idempotencyKey });
   }
 
-  /**
-   * Serviceability gate. Must run (and return "serviceable") before a
-   * checkout session can be created. Never charges for manual_review or
-   * unsupported jobs.
-   */
-  async runServiceabilityCheck(jobId: number): Promise<ServiceabilityCheckResult | null> {
-    const job = await this.loadJob(jobId);
-    if (!job) return null;
-
+  /** Shared candidate load: every non-opted-out candidate, with its full trade list attached. */
+  private async loadCandidatesForRanking(): Promise<
+    Array<CandidateForRanking & { businessName: string; phone: string; website: string | null }>
+  > {
     const candidateRows = await this.database
       .select()
       .from(candidateProvidersTable)
@@ -108,26 +104,43 @@ export class PaidDispatchRepository {
       capabilitiesByProviderId.set(row.candidateProviderId, existing);
     }
 
+    return candidateRows.map((row) => ({
+      id: row.id,
+      businessName: row.businessName,
+      phone: row.phone,
+      website: row.website,
+      trade: row.trade,
+      trades: capabilitiesByProviderId.get(row.id) ?? [row.trade],
+      subServices: row.subServices,
+      serviceSuburbs: row.serviceSuburbs,
+      servicePostcodes: row.servicePostcodes,
+      afterHoursAvailable: row.afterHoursAvailable,
+      verificationStatus: row.verificationStatus,
+      optedOutAt: row.optedOutAt,
+      responseCount: row.responseCount,
+      acceptanceCount: row.acceptanceCount,
+      tier: row.tier,
+    }));
+  }
+
+  /**
+   * Serviceability gate. Must run (and return "serviceable") before a
+   * checkout session can be created. Never charges for manual_review or
+   * unsupported jobs.
+   */
+  async runServiceabilityCheck(jobId: number): Promise<ServiceabilityCheckResult | null> {
+    const job = await this.loadJob(jobId);
+    if (!job) return null;
+
+    const candidates = await this.loadCandidatesForRanking();
+
     const result = assessServiceability({
       trade: job.trade,
       description: job.description,
       suburb: job.suburb,
       postcode: job.postcode,
       urgency: job.urgency,
-      candidates: candidateRows.map((row) => ({
-        id: row.id,
-        trade: row.trade,
-        trades: capabilitiesByProviderId.get(row.id) ?? [row.trade],
-        subServices: row.subServices,
-        serviceSuburbs: row.serviceSuburbs,
-        servicePostcodes: row.servicePostcodes,
-        afterHoursAvailable: row.afterHoursAvailable,
-        verificationStatus: row.verificationStatus,
-        optedOutAt: row.optedOutAt,
-        responseCount: row.responseCount,
-        acceptanceCount: row.acceptanceCount,
-        tier: row.tier,
-      })),
+      candidates,
     });
 
     await this.database
@@ -144,10 +157,71 @@ export class PaidDispatchRepository {
   }
 
   /**
+   * Top nearby candidates for manual calling -- the shortlist an operator
+   * works down by phone when a job is in manual_review (no dispatch_eligible
+   * candidate yet). Same ranking as the automated path (rankCandidates), so
+   * "closest/best match first" is consistent whether AI or a human is
+   * dispatching. Returns candidates regardless of verification_status --
+   * verification is exactly what the phone call is for.
+   */
+  async getCandidateShortlist(
+    jobId: number,
+    limit = 10,
+  ): Promise<{
+    inferredTrade: string | null;
+    candidates: Array<{
+      id: number;
+      businessName: string;
+      phone: string;
+      website: string | null;
+      verificationStatus: string;
+      trades: string[];
+      score: number;
+      reasons: string[];
+    }>;
+  } | null> {
+    const job = await this.loadJob(jobId);
+    if (!job) return null;
+
+    const inferredTrade = inferTrade(job.trade, job.description);
+    if (!inferredTrade) return { inferredTrade: null, candidates: [] };
+
+    const candidates = await this.loadCandidatesForRanking();
+    const ranked = rankCandidates(
+      { trade: inferredTrade, suburb: job.suburb, postcode: job.postcode, urgency: job.urgency },
+      candidates,
+    ).slice(0, limit);
+
+    return {
+      inferredTrade,
+      candidates: ranked.map((candidate) => ({
+        id: candidate.id,
+        businessName: candidate.businessName,
+        phone: candidate.phone,
+        website: candidate.website,
+        verificationStatus: candidate.verificationStatus,
+        trades: candidate.trades,
+        score: candidate.score,
+        reasons: candidate.reasons,
+      })),
+    };
+  }
+
+  /**
    * Creates a Stripe TEST-mode checkout session for the sourcing fee.
-   * Refuses unless the job has already been marked "serviceable" by
-   * runServiceabilityCheck. The browser success redirect is never treated
-   * as payment confirmation -- only the webhook (payment_confirmed) is.
+   * Refuses unless the job has already been marked "serviceable" OR
+   * "manual_review" by runServiceabilityCheck.
+   *
+   * "manual_review" means no dispatch_eligible (licence-checked) candidate
+   * exists yet -- only unverified/listing_verified public leads. Letting
+   * those through to checkout is a deliberate product decision: the
+   * homeowner is paying for SourceTradie to personally source and match a
+   * provider by phone (see recordManualMatch), not for instant AI dispatch
+   * to a licence-verified tradie. No candidate's verification_status is
+   * misrepresented by this -- it only changes when payment is collected
+   * relative to when a human locks in the match. The browser success
+   * redirect is never treated as payment confirmation -- only the webhook
+   * (payment_confirmed) is.
    */
   async startCheckout(input: {
     jobId: number;
@@ -156,7 +230,8 @@ export class PaidDispatchRepository {
   }): Promise<CheckoutStartResult> {
     const job = await this.loadJob(input.jobId);
     if (!job) return { ok: false, errorCode: "job_not_found" };
-    if (job.paidFlowState !== "serviceable" && job.paidFlowState !== "checkout_started") {
+    const payableStates = new Set(["serviceable", "manual_review", "checkout_started"]);
+    if (!payableStates.has(job.paidFlowState)) {
       return { ok: false, errorCode: `not_serviceable:${job.paidFlowState}` };
     }
     if (!this.paymentProvider.configured) {

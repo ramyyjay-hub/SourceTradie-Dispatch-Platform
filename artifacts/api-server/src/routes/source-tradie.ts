@@ -1029,6 +1029,25 @@ export function createSourceTradieRouter(
     },
   );
 
+  router.get(
+    "/admin/jobs/:id/candidate-shortlist",
+    authRequired,
+    requireAdmin,
+    async (req, res) => {
+      const parsed = GetJobParams.safeParse(req.params);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid job identifier." });
+      }
+      const shortlist = await paidDispatchRepository.getCandidateShortlist(
+        parsed.data.id,
+      );
+      if (!shortlist) {
+        return res.status(404).json({ error: "Job not found." });
+      }
+      return res.json(shortlist);
+    },
+  );
+
   router.post(
     "/admin/jobs/:id/manual-match",
     authRequired,
