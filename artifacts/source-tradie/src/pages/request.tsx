@@ -1094,12 +1094,31 @@ function PaidSourcingPanel({
 
   if (job.paidFlowState === "manual_review") {
     return (
-      <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
-        <SectionLabel>AI-assisted sourcing</SectionLabel>
-        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-          This request needs a quick manual review before we can offer paid
-          sourcing. Your free request above is still being handled as normal.
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
+        <SectionLabel>Personally-sourced tradie</SectionLabel>
+        <p className="mt-2 text-2xl font-bold tracking-[-.04em]">
+          $29.99 AUD
         </p>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+          We don't have an instant AI match for this one yet, so our team
+          will personally call around and find you a suitable local tradie,
+          then bring you a real price and ETA to approve. If we can't find a
+          suitable match, this fee is fully refunded. This is a TEST-mode
+          payment — no real charge is made.
+        </p>
+        <button
+          className="btn-accent mt-4"
+          disabled={startCheckout.isPending}
+          onClick={handleCheckout}
+          data-testid="button-start-checkout-manual"
+        >
+          {startCheckout.isPending ? "Starting checkout" : "Get sourcing"}
+        </button>
+        {checkoutError && (
+          <p className="mt-3 text-sm text-[hsl(var(--destructive))]">
+            {checkoutError}
+          </p>
+        )}
       </div>
     );
   }
