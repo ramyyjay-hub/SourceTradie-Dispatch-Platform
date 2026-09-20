@@ -43,7 +43,7 @@ function same(value: string, expected: string): boolean {
   return value.trim().toLowerCase() === expected.trim().toLowerCase();
 }
 
-export function rankCandidates(job: SourcingJob, candidates: CandidateForRanking[]) {
+export function rankCandidates<T extends CandidateForRanking>(job: SourcingJob, candidates: T[]) {
   return candidates
     .filter((candidate) => !candidate.optedOutAt)
     .map((candidate) => {

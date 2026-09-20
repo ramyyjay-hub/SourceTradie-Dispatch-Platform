@@ -325,17 +325,21 @@ describe("paid dispatch: synthetic failure / refund path", () => {
 });
 
 describe("paid dispatch: serviceability gate refuses to charge", () => {
-  it("does not offer checkout for an unsupported trade/postcode", async () => {
+  it("does not offer checkout when there are zero plausible candidates at all (unsupported)", async () => {
     const { repository, insertJob } = await buildHarness();
+    // An explicit, resolvable trade with no matching candidates anywhere in
+    // the pool -- genuinely "unsupported", not just unverified. This is the
+    // one outcome that must never be payable, manual-match or not: there is
+    // no one at all to call.
     const job = await insertJob({
-      trade: "Not sure",
+      trade: "Chimney Sweep",
       description: "The chimney sweep needs re-lining, very specialised work.",
       postcode: "9999",
       suburb: "Nowhere",
     });
 
     const serviceability = await repository.runServiceabilityCheck(job.id);
-    expect(serviceability?.outcome).not.toBe("serviceable");
+    expect(serviceability?.outcome).toBe("unsupported");
 
     const checkout = await repository.startCheckout({
       jobId: job.id,
@@ -346,7 +350,7 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
     if (!checkout.ok) expect(checkout.errorCode).toContain("not_serviceable");
   });
 
-  it("does not treat a pile of unverified public_discovery candidates as serviceable -- routes to manual_review instead", async () => {
+  it("does not treat a pile of unverified public_discovery candidates as automatically serviceable -- routes to manual_review, which can still be paid for manual (human) matching", async () => {
     const { repository, testDb, insertJob } = await buildHarness();
 
     // Freshly public_discovery-imported candidates: exactly what the 146-row
@@ -376,13 +380,31 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
     expect(serviceability?.verifiedCandidateCount).toBe(0);
     expect(serviceability?.dispatchReadyCount).toBe(0);
 
+    // manual_review is deliberately payable: the homeowner is paying for
+    // SourceTradie to personally source and match a provider by phone (see
+    // recordManualMatch), not for instant AI dispatch to a licence-verified
+    // tradie. No candidate's verification_status changes as a result.
     const checkout = await repository.startCheckout({
       jobId: job.id,
       successUrl: "https://sourcetradie.com.au/request/1?paid=1",
       cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
     });
-    expect(checkout.ok).toBe(false);
-    if (!checkout.ok) expect(checkout.errorCode).toContain("not_serviceable");
+    expect(checkout.ok).toBe(true);
+    if (checkout.ok) {
+      const jobAfterCheckout = await testDb
+        .select()
+        .from(jobsTable)
+        .where(eq(jobsTable.id, job.id));
+      expect(jobAfterCheckout[0]?.paidFlowState).toBe("checkout_started");
+    }
+
+    // The unverified candidates themselves are untouched -- still nobody's
+    // verification_status was flipped just because a job became payable.
+    const candidatesAfter = await testDb
+      .select({ verificationStatus: candidateProvidersTable.verificationStatus })
+      .from(candidateProvidersTable)
+      .where(eq(candidateProvidersTable.trade, "Electrical"));
+    expect(candidatesAfter.every((row) => row.verificationStatus === "unverified")).toBe(true);
   });
 
   it("becomes serviceable once at least one candidate is promoted to dispatch_eligible", async () => {
@@ -510,6 +532,59 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
     // The provider-level source_url stays the canonical/general one, independent
     // of either capability-specific source.
     expect(cloudFlow!.sourceUrl).toBe("https://www.solusplumbing.com.au/vic/");
+  });
+
+  it("candidate shortlist returns up to 10 ranked nearby candidates for manual calling, regardless of verification status", async () => {
+    const { repository, testDb, insertJob } = await buildHarness();
+
+    for (let i = 0; i < 12; i++) {
+      await testDb.insert(candidateProvidersTable).values({
+        businessName: `Richmond Sparky ${i}`,
+        normalizedBusinessName: normalizeBusinessName(`Richmond Sparky ${i}`),
+        trade: "Electrical",
+        subServices: [],
+        phone: `040000030${i}`,
+        normalizedPhone: `+6140000030${i}`,
+        serviceSuburbs: ["Richmond"],
+        servicePostcodes: ["3121"],
+        source: "public_discovery",
+        verificationStatus: "unverified",
+        contactEligibility: "manual_only",
+      });
+    }
+    // One out-of-area candidate that shouldn't outrank the 12 in-area ones.
+    await testDb.insert(candidateProvidersTable).values({
+      businessName: "Faraway Sparky",
+      normalizedBusinessName: normalizeBusinessName("Faraway Sparky"),
+      trade: "Electrical",
+      subServices: [],
+      phone: "0400000399",
+      normalizedPhone: "+61400000399",
+      serviceSuburbs: ["Ballarat"],
+      servicePostcodes: ["3350"],
+      source: "public_discovery",
+      verificationStatus: "unverified",
+      contactEligibility: "manual_only",
+    });
+
+    const job = await insertJob({ trade: "Electrical" });
+    const shortlist = await repository.getCandidateShortlist(job.id);
+
+    expect(shortlist?.inferredTrade).toBe("Electrical");
+    expect(shortlist?.candidates.length).toBe(10);
+    expect(
+      shortlist?.candidates.every((candidate) =>
+        candidate.businessName.startsWith("Richmond Sparky"),
+      ),
+    ).toBe(true);
+    expect(
+      shortlist?.candidates.some((candidate) => candidate.businessName === "Faraway Sparky"),
+    ).toBe(false);
+    // No verification-status filtering -- these are all "unverified", and
+    // that's exactly the point: the phone call is what verifies them.
+    expect(
+      shortlist?.candidates.every((candidate) => candidate.verificationStatus === "unverified"),
+    ).toBe(true);
   });
 });
 
