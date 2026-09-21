@@ -1060,57 +1060,51 @@ function PaidSourcingPanel({
     );
   };
 
-  if (job.paidFlowState === "not_started") return null;
-
-  if (job.paidFlowState === "serviceable") {
+  if (job.paidFlowState === "not_started") {
+    const checks = [
+      `Checking coverage in ${job.intake.suburb} ${job.intake.postcode}`,
+      `Matching ${job.intake.trade} providers to your job`,
+      "Calculating a fair price for this job",
+    ];
     return (
       <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
-        <SectionLabel>AI-assisted sourcing available</SectionLabel>
+        <div className="flex items-center gap-3">
+          <LoaderCircle size={18} className="animate-spin text-[hsl(var(--secondary))]" />
+          <SectionLabel>Searching for local tradies</SectionLabel>
+        </div>
+        <ul className="mt-4 space-y-2.5">
+          {checks.map((check, index) => (
+            <li
+              key={check}
+              className="flex items-center gap-2.5 text-sm text-[hsl(var(--muted-foreground))] animate-rise"
+              style={{ animationDelay: `${index * 350}ms` }}
+            >
+              <Check size={14} className="shrink-0 text-[hsl(var(--secondary))]" />
+              {check}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  if (job.paidFlowState === "serviceable" || job.paidFlowState === "manual_review") {
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
+        <SectionLabel>Sourcing available</SectionLabel>
         <p className="mt-2 text-2xl font-bold tracking-[-.04em]">
           $29.99 AUD
         </p>
         <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-          We'll personally source a suitable local tradie for this job and
-          bring you a real price and ETA to approve. If we can't find a
-          suitable match, this fee is fully refunded. This is a TEST-mode
-          payment — no real charge is made.
+          We'll source a suitable local tradie for this job and bring you a
+          real price and ETA to approve. If we can't find a suitable match,
+          this fee is fully refunded.
         </p>
         <button
           className="btn-accent mt-4"
           disabled={startCheckout.isPending}
           onClick={handleCheckout}
           data-testid="button-start-checkout"
-        >
-          {startCheckout.isPending ? "Starting checkout" : "Get AI sourcing"}
-        </button>
-        {checkoutError && (
-          <p className="mt-3 text-sm text-[hsl(var(--destructive))]">
-            {checkoutError}
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  if (job.paidFlowState === "manual_review") {
-    return (
-      <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
-        <SectionLabel>Personally-sourced tradie</SectionLabel>
-        <p className="mt-2 text-2xl font-bold tracking-[-.04em]">
-          $29.99 AUD
-        </p>
-        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-          We don't have an instant AI match for this one yet, so our team
-          will personally call around and find you a suitable local tradie,
-          then bring you a real price and ETA to approve. If we can't find a
-          suitable match, this fee is fully refunded. This is a TEST-mode
-          payment — no real charge is made.
-        </p>
-        <button
-          className="btn-accent mt-4"
-          disabled={startCheckout.isPending}
-          onClick={handleCheckout}
-          data-testid="button-start-checkout-manual"
         >
           {startCheckout.isPending ? "Starting checkout" : "Get sourcing"}
         </button>
@@ -1126,7 +1120,7 @@ function PaidSourcingPanel({
   if (job.paidFlowState === "unsupported") {
     return (
       <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
-        <SectionLabel>AI-assisted sourcing</SectionLabel>
+        <SectionLabel>Sourcing</SectionLabel>
         <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
           We don't currently have coverage to offer paid sourcing for this
           request, so we haven't charged anything. Your free request above is
@@ -1141,8 +1135,8 @@ function PaidSourcingPanel({
       <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
         <SectionLabel>Checkout in progress</SectionLabel>
         <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-          A secure TEST-mode checkout was started. If you didn't finish it or
-          your payment hasn't gone through, you can try again below.
+          A secure checkout was started. If you didn't finish it or your
+          payment hasn't gone through, you can try again below.
         </p>
         <button
           className="btn-quiet mt-4 border"
@@ -1167,7 +1161,7 @@ function PaidSourcingPanel({
   ) {
     return (
       <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
-        <SectionLabel>Paid sourcing (TEST mode)</SectionLabel>
+        <SectionLabel>Paid sourcing</SectionLabel>
         <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
           Your $29.99 sourcing fee has been received. We're personally
           sourcing a suitable local tradie for this job now — we'll show a
@@ -1243,8 +1237,7 @@ function PaidSourcingPanel({
         <SectionLabel>Sourcing unsuccessful</SectionLabel>
         <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
           We weren't able to find a suitable tradie for this job. Your $29.99
-          sourcing fee is being refunded (TEST mode) — no action is needed
-          from you.
+          sourcing fee is being refunded — no action is needed from you.
         </p>
       </div>
     );
@@ -1255,7 +1248,7 @@ function PaidSourcingPanel({
       <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
         <SectionLabel>Sourcing fee refunded</SectionLabel>
         <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-          Your $29.99 sourcing fee has been refunded (TEST mode).
+          Your $29.99 sourcing fee has been refunded.
         </p>
       </div>
     );
