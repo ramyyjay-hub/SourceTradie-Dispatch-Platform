@@ -626,4 +626,15 @@ describe("StripePaymentProvider safety rails", () => {
     expect(provider.configured).toBe(true);
     expect(provider.testMode).toBe(true);
   });
+
+  it("is configured and marked test-mode for a restricted rk_test_ key", () => {
+    const provider = new StripePaymentProvider("rk_test_fake_for_test_only", "whsec_fake");
+    expect(provider.configured).toBe(true);
+    expect(provider.testMode).toBe(true);
+  });
+
+  it("refuses to operate with a live restricted (rk_live_) key just like sk_live_", () => {
+    const provider = new StripePaymentProvider("rk_live_fake_for_test_only", undefined);
+    expect(provider.configured).toBe(false);
+  });
 });

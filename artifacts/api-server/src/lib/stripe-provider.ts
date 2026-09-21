@@ -42,7 +42,11 @@ export class StripePaymentProvider implements PaymentProvider {
     private readonly webhookSecret = process.env.STRIPE_WEBHOOK_SECRET,
   ) {
     this.configured = typeof this.secretKey === "string" && this.secretKey.length > 0;
-    this.testMode = this.secretKey?.startsWith("sk_test_") ?? false;
+    // Recognizes both standard secret keys (sk_test_/sk_live_) and
+    // restricted keys (rk_test_/rk_live_) -- a restricted key scoped to just
+    // Checkout Sessions + Refunds is the key this app actually uses, and its
+    // test/live-ness is carried by the same _test_/_live_ infix.
+    this.testMode = /^[rs]k_test_/.test(this.secretKey ?? "");
     this.client = this.configured
       ? new Stripe(this.secretKey as string, { apiVersion: "2025-02-24.acacia" })
       : null;
