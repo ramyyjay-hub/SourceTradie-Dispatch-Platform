@@ -1060,7 +1060,33 @@ function PaidSourcingPanel({
     );
   };
 
-  if (job.paidFlowState === "not_started") return null;
+  if (job.paidFlowState === "not_started") {
+    const checks = [
+      `Checking coverage in ${job.intake.suburb} ${job.intake.postcode}`,
+      `Matching ${job.intake.trade} providers to your job`,
+      "Calculating a fair price for this job",
+    ];
+    return (
+      <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
+        <div className="flex items-center gap-3">
+          <LoaderCircle size={18} className="animate-spin text-[hsl(var(--secondary))]" />
+          <SectionLabel>Searching for local tradies</SectionLabel>
+        </div>
+        <ul className="mt-4 space-y-2.5">
+          {checks.map((check, index) => (
+            <li
+              key={check}
+              className="flex items-center gap-2.5 text-sm text-[hsl(var(--muted-foreground))] animate-rise"
+              style={{ animationDelay: `${index * 350}ms` }}
+            >
+              <Check size={14} className="shrink-0 text-[hsl(var(--secondary))]" />
+              {check}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
 
   if (job.paidFlowState === "serviceable" || job.paidFlowState === "manual_review") {
     return (
