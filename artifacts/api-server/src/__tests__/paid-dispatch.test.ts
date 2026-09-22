@@ -58,15 +58,24 @@ class MockPaymentProvider implements PaymentProvider {
   readonly testMode = true;
   public sessionCounter = 0;
   public refundCounter = 0;
-  public createdSessions: Array<{ jobId: number; sessionId: string }> = [];
+  public createdSessions: Array<{
+    jobId: number;
+    sessionId: string;
+    customerEmail?: string;
+  }> = [];
   public refunds: string[] = [];
 
   async createCheckoutSession(input: {
     jobId: number;
+    customerEmail?: string;
   }): Promise<CreateCheckoutResult> {
     this.sessionCounter += 1;
     const sessionId = `cs_test_mock_${this.sessionCounter}`;
-    this.createdSessions.push({ jobId: input.jobId, sessionId });
+    this.createdSessions.push({
+      jobId: input.jobId,
+      sessionId,
+      customerEmail: input.customerEmail,
+    });
     return {
       ok: true,
       checkoutUrl: `https://checkout.stripe.com/test/${sessionId}`,
@@ -303,6 +312,25 @@ describe("paid dispatch: synthetic success path", () => {
       .from(jobPaymentsTable)
       .where(eq(jobPaymentsTable.jobId, job.id));
     expect(payments.length).toBe(1);
+  });
+
+  it("does not send an empty-string customerEmail to Stripe -- caused a real checkout failure on the live site", async () => {
+    const { repository, paymentProvider, insertJob } = await buildHarness();
+    // Job intake stores "" (not null/undefined) when the customer leaves the
+    // optional email field blank. Stripe rejects "" as an invalid email and
+    // the checkout call fails outright -- reproduced directly against
+    // production (job with a blank email consistently got
+    // {"error":"stripe_checkout_failed"}).
+    const job = await insertJob({ customerEmail: "" });
+    await repository.runServiceabilityCheck(job.id);
+
+    const checkout = await repository.startCheckout({
+      jobId: job.id,
+      successUrl: "https://sourcetradie.com.au/request/1?paid=1",
+      cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
+    });
+    expect(checkout.ok).toBe(true);
+    expect(paymentProvider.createdSessions[0]?.customerEmail).toBeUndefined();
   });
 });
 
