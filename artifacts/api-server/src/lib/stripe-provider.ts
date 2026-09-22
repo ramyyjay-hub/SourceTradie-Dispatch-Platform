@@ -51,11 +51,16 @@ export class StripePaymentProvider implements PaymentProvider {
       ? new Stripe(this.secretKey as string, { apiVersion: "2025-02-24.acacia" })
       : null;
 
-    if (this.configured && !this.testMode && process.env.NODE_ENV !== "production_live_payments_approved") {
+    if (this.configured && !this.testMode && process.env.STRIPE_LIVE_PAYMENTS_APPROVED !== "true") {
       // Hard safety rail: this build must never take live payments unless a
       // separate, explicitly-named env var is set by a human outside code.
-      // Never set STRIPE_SECRET_KEY to a live (sk_live_) key without also
-      // reviewing this guard.
+      // Deliberately NOT NODE_ENV: that value is relied on elsewhere
+      // (logger.ts's transport choice, app.ts's CORS origin check) for its
+      // standard Node.js meaning, and overloading it with this flag broke
+      // both -- the logger crashed trying to load a dev-only worker-thread
+      // transport not bundled for serverless, and CORS silently allowed any
+      // origin through. Never set STRIPE_SECRET_KEY to a live (sk_live_/
+      // rk_live_) key without also reviewing this guard.
       this.client = null;
       (this as { configured: boolean }).configured = false;
     }
