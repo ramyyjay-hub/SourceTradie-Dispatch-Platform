@@ -637,4 +637,27 @@ describe("StripePaymentProvider safety rails", () => {
     const provider = new StripePaymentProvider("rk_live_fake_for_test_only", undefined);
     expect(provider.configured).toBe(false);
   });
+
+  it("allows a live key only once STRIPE_LIVE_PAYMENTS_APPROVED=true is set -- not NODE_ENV", () => {
+    const original = process.env.STRIPE_LIVE_PAYMENTS_APPROVED;
+    try {
+      delete process.env.STRIPE_LIVE_PAYMENTS_APPROVED;
+      expect(new StripePaymentProvider("sk_live_fake_for_test_only", undefined).configured).toBe(false);
+
+      // Setting NODE_ENV alone (the old, collision-prone mechanism) must NOT
+      // open the gate -- NODE_ENV is relied on elsewhere for its standard
+      // meaning (logger transport choice, CORS origin checks) and must never
+      // be repurposed as this flag again.
+      const originalNodeEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production_live_payments_approved";
+      expect(new StripePaymentProvider("sk_live_fake_for_test_only", undefined).configured).toBe(false);
+      process.env.NODE_ENV = originalNodeEnv;
+
+      process.env.STRIPE_LIVE_PAYMENTS_APPROVED = "true";
+      expect(new StripePaymentProvider("sk_live_fake_for_test_only", "whsec_fake").configured).toBe(true);
+    } finally {
+      if (original === undefined) delete process.env.STRIPE_LIVE_PAYMENTS_APPROVED;
+      else process.env.STRIPE_LIVE_PAYMENTS_APPROVED = original;
+    }
+  });
 });
