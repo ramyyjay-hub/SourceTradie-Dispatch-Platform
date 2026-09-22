@@ -105,10 +105,19 @@ async function buildAll() {
       "electron",
     ],
     sourcemap: "linked",
-    plugins: [
-      // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
-      esbuildPluginPino({ transports: ["pino-pretty"] })
-    ],
+    // Skipped when building on Vercel: production's logger (see logger.ts)
+    // never uses the pino-pretty transport this plugin bundles worker files
+    // for, and Vercel's serverless function bundler doesn't trace the
+    // worker file's dynamically-computed runtime path -- it silently drops
+    // dist/thread-stream-worker.mjs from the deployed function regardless,
+    // crashing with "Cannot find module" on the very first log call. The
+    // plugin still runs for local dev builds, where pino-pretty is used.
+    plugins: process.env.VERCEL
+      ? []
+      : [
+          // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
+          esbuildPluginPino({ transports: ["pino-pretty"] }),
+        ],
     // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {
       js: `import { createRequire as __bannerCrReq } from 'node:module';
