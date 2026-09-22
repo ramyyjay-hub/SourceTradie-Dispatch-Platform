@@ -252,15 +252,22 @@ export class PaidDispatchRepository {
     });
     if (!result.ok) return result;
 
-    await this.database.insert(jobPaymentsTable).values({
-      jobId: input.jobId,
-      stripeCheckoutSessionId: result.sessionId,
-      amountCents: SOURCING_FEE_AMOUNT_CENTS,
-      currency: "aud",
-      status: "pending",
-      idempotencyKey,
-      testMode: result.testMode,
-    });
+    // Retrying checkout (e.g. the frontend's "Retry checkout" button, or a
+    // double-click) reuses the same idempotencyKey for the same job on the
+    // same day -- Stripe returns the same session either way, and this
+    // insert would otherwise crash on the idempotency_key unique index.
+    await this.database
+      .insert(jobPaymentsTable)
+      .values({
+        jobId: input.jobId,
+        stripeCheckoutSessionId: result.sessionId,
+        amountCents: SOURCING_FEE_AMOUNT_CENTS,
+        currency: "aud",
+        status: "pending",
+        idempotencyKey,
+        testMode: result.testMode,
+      })
+      .onConflictDoNothing({ target: jobPaymentsTable.idempotencyKey });
 
     await this.database
       .update(jobsTable)
