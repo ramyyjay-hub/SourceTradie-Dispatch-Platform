@@ -276,6 +276,34 @@ describe("paid dispatch: synthetic success path", () => {
     // Never a live charge, never a real notification/SMS side effect.
     expect(paymentProvider.refundCounter).toBe(0);
   });
+
+  it("retrying checkout for the same job on the same day does not crash (idempotency key reuse)", async () => {
+    const { repository, insertJob, testDb } = await buildHarness();
+    const job = await insertJob();
+    await repository.runServiceabilityCheck(job.id);
+
+    const first = await repository.startCheckout({
+      jobId: job.id,
+      successUrl: "https://sourcetradie.com.au/request/1?paid=1",
+      cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
+    });
+    expect(first.ok).toBe(true);
+
+    // Simulates the frontend's "Retry checkout" button (or a double-click)
+    // -- same job, same day, so startCheckout reuses the same idempotencyKey.
+    const second = await repository.startCheckout({
+      jobId: job.id,
+      successUrl: "https://sourcetradie.com.au/request/1?paid=1",
+      cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
+    });
+    expect(second.ok).toBe(true);
+
+    const payments = await testDb
+      .select()
+      .from(jobPaymentsTable)
+      .where(eq(jobPaymentsTable.jobId, job.id));
+    expect(payments.length).toBe(1);
+  });
 });
 
 describe("paid dispatch: synthetic failure / refund path", () => {
