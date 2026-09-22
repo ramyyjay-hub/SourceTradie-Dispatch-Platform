@@ -834,6 +834,9 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
   }
 
   const lifecycle = getCustomerLifecyclePresentation(job.status);
+  const paymentPending = ["not_started", "serviceable", "manual_review"].includes(
+    job.paidFlowState,
+  );
 
   return (
     <div className="min-h-[100dvh]">
@@ -849,10 +852,22 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
       <main className="content-wrap max-w-[820px] py-12 md:py-20">
         <SectionLabel>Request {job.reference}</SectionLabel>
         <h1 className="mt-3 max-w-2xl text-5xl font-bold leading-[.92] tracking-[-.075em]">
-          We’re sourcing
-          <br />
-          <span className="font-display font-normal italic">your tradie.</span>
+          {paymentPending ? (
+            <>
+              Complete payment
+              <br />
+              <span className="font-display font-normal italic">to find a tradie.</span>
+            </>
+          ) : (
+            <>
+              We’re sourcing
+              <br />
+              <span className="font-display font-normal italic">your tradie.</span>
+            </>
+          )}
         </h1>
+
+        <PaidSourcingPanel id={id} token={requestToken} job={job} queryClient={queryClient} />
 
         <div className="mt-10 rounded-[1.5rem] bg-[hsl(var(--primary))] p-6 text-[hsl(var(--primary-foreground))] md:p-9">
           <div className="flex items-center justify-between">
@@ -940,13 +955,6 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
               </div>
             )}
         </div>
-
-        <PaidSourcingPanel
-          id={id}
-          token={requestToken}
-          job={job}
-          queryClient={queryClient}
-        />
 
         {job.expectedPrice && (
           <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
