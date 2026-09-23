@@ -158,9 +158,9 @@ export const MELBOURNE_PRICING_RULES = {
     kind: "diagnostic",
     minCents: 12_000,
     maxCents: 16_000,
-    customerLabel: "Expected general diagnostic/call-out price",
+    customerLabel: "Expected price to fix what you've shown us",
     scope:
-      "Attendance and up to 30 minutes of visual assessment for one general-maintenance issue during standard hours, including basic measurements and a recommended next step. Repair labour, materials, licensed trade work, destructive investigation, difficult access, multiple unrelated issues and additional work require a separate customer-approved price.",
+      "We'll attend during standard hours and resolve the issue exactly as described and shown in your photos, where it's a straightforward fix within this price. If it needs parts, licensed trade work, destructive investigation, difficult access, covers more than one issue, or turns out bigger than what you showed us, we'll always send you a clear separate price to approve or decline before doing anything further -- never extra work without your OK.",
   },
 } as const satisfies Record<string, PricingRule>;
 
