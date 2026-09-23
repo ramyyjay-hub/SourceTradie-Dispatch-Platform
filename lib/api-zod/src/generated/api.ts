@@ -641,7 +641,7 @@ export const RunServiceabilityCheckResponse = zod.object({
 
 
 /**
- * @summary Create a TEST-mode Stripe checkout session for the $29.99 sourcing fee. Only allowed once the job has been marked serviceable. Payment is only ever confirmed by the Stripe webhook, never by this response or the browser success redirect.
+ * @summary Create a Stripe Embedded Checkout session for the $29.99 sourcing fee -- returns a client_secret for the frontend to mount in-page. Only allowed once the job has been marked serviceable or manual_review. Payment is only ever confirmed by the Stripe webhook, never by this response or the return_url redirect.
  */
 export const StartCheckoutParams = zod.object({
   "id": zod.coerce.number()
@@ -650,14 +650,12 @@ export const StartCheckoutParams = zod.object({
 
 
 
-
 export const StartCheckoutBody = zod.object({
-  "successUrl": zod.string().min(1),
-  "cancelUrl": zod.string().min(1)
+  "returnUrl": zod.string().min(1)
 })
 
 export const StartCheckoutResponse = zod.object({
-  "checkoutUrl": zod.string(),
+  "clientSecret": zod.string(),
   "testMode": zod.boolean()
 })
 

@@ -869,7 +869,7 @@ export const getStartCheckoutUrl = (id: number,) => {
 }
 
 /**
- * @summary Create a TEST-mode Stripe checkout session for the $29.99 sourcing fee. Only allowed once the job has been marked serviceable. Payment is only ever confirmed by the Stripe webhook, never by this response or the browser success redirect.
+ * @summary Create a Stripe Embedded Checkout session for the $29.99 sourcing fee -- returns a client_secret for the frontend to mount in-page. Only allowed once the job has been marked serviceable or manual_review. Payment is only ever confirmed by the Stripe webhook, never by this response or the return_url redirect.
  */
 export const startCheckout = async (id: number,
     checkoutInput: CheckoutInput, options?: Parameters<typeof customFetch>[1]): Promise<CheckoutSession> => {
@@ -919,7 +919,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type StartCheckoutMutationError = ErrorType<void>
 
     /**
- * @summary Create a TEST-mode Stripe checkout session for the $29.99 sourcing fee. Only allowed once the job has been marked serviceable. Payment is only ever confirmed by the Stripe webhook, never by this response or the browser success redirect.
+ * @summary Create a Stripe Embedded Checkout session for the $29.99 sourcing fee -- returns a client_secret for the frontend to mount in-page. Only allowed once the job has been marked serviceable or manual_review. Payment is only ever confirmed by the Stripe webhook, never by this response or the return_url redirect.
  */
 export const useStartCheckout = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startCheckout>>, TError,{id: number;data: BodyType<CheckoutInput>}, TContext>, request?: SecondParameter<typeof customFetch>}

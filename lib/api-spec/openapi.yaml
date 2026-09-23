@@ -247,10 +247,11 @@ paths:
       operationId: startCheckout
       tags: [jobs]
       summary: >-
-        Create a TEST-mode Stripe checkout session for the $29.99 sourcing
-        fee. Only allowed once the job has been marked serviceable. Payment
-        is only ever confirmed by the Stripe webhook, never by this response
-        or the browser success redirect.
+        Create a Stripe Embedded Checkout session for the $29.99 sourcing
+        fee -- returns a client_secret for the frontend to mount in-page.
+        Only allowed once the job has been marked serviceable or
+        manual_review. Payment is only ever confirmed by the Stripe webhook,
+        never by this response or the return_url redirect.
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -1421,16 +1422,19 @@ components:
 
     CheckoutInput:
       type: object
-      required: [successUrl, cancelUrl]
+      required: [returnUrl]
       properties:
-        successUrl: { type: string, minLength: 1 }
-        cancelUrl: { type: string, minLength: 1 }
+        # Embedded Checkout takes a single return_url -- Stripe navigates the
+        # top-level page here (with ?session_id=... appended) once payment
+        # completes inside the embedded iframe. There is no separate
+        # cancel_url in embedded mode.
+        returnUrl: { type: string, minLength: 1 }
 
     CheckoutSession:
       type: object
-      required: [checkoutUrl, testMode]
+      required: [clientSecret, testMode]
       properties:
-        checkoutUrl: { type: string }
+        clientSecret: { type: string }
         testMode: { type: boolean }
 
     ApproveMatchInput:

@@ -27,7 +27,7 @@ type DbLike = typeof WorkspaceDb;
 export type ServiceabilityCheckResult = ServiceabilityResult;
 
 export type CheckoutStartResult =
-  | { ok: true; checkoutUrl: string; testMode: boolean }
+  | { ok: true; clientSecret: string; testMode: boolean }
   | { ok: false; errorCode: string };
 
 export class PaidDispatchRepository {
@@ -208,8 +208,9 @@ export class PaidDispatchRepository {
   }
 
   /**
-   * Creates a Stripe TEST-mode checkout session for the sourcing fee.
-   * Refuses unless the job has already been marked "serviceable" OR
+   * Creates a Stripe Embedded Checkout session for the sourcing fee --
+   * returns a client_secret the frontend mounts in-page (no redirect off
+   * site). Refuses unless the job has already been marked "serviceable" OR
    * "manual_review" by runServiceabilityCheck.
    *
    * "manual_review" means no dispatch_eligible (licence-checked) candidate
@@ -225,8 +226,7 @@ export class PaidDispatchRepository {
    */
   async startCheckout(input: {
     jobId: number;
-    successUrl: string;
-    cancelUrl: string;
+    returnUrl: string;
   }): Promise<CheckoutStartResult> {
     const job = await this.loadJob(input.jobId);
     if (!job) return { ok: false, errorCode: "job_not_found" };
@@ -246,8 +246,7 @@ export class PaidDispatchRepository {
       jobId: input.jobId,
       reference: job.reference,
       idempotencyKey,
-      successUrl: input.successUrl,
-      cancelUrl: input.cancelUrl,
+      returnUrl: input.returnUrl,
       // customerEmail is optional on job intake and often stored as "" rather
       // than null/undefined when the customer skips it. Stripe rejects an
       // empty-string customer_email as an invalid email, which was crashing
@@ -278,7 +277,7 @@ export class PaidDispatchRepository {
       .set({ paidFlowState: "checkout_started", updatedAt: new Date() })
       .where(eq(jobsTable.id, input.jobId));
 
-    return { ok: true, checkoutUrl: result.checkoutUrl, testMode: result.testMode };
+    return { ok: true, clientSecret: result.clientSecret, testMode: result.testMode };
   }
 
   verifyWebhookSignature(rawBody: Buffer, signature: string) {
