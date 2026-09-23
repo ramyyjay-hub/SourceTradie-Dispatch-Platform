@@ -1,7 +1,37 @@
-import { ArrowRight, Check, Clock3, MapPin, ShieldCheck, Sparkles, UsersRound } from 'lucide-react';
+import {
+  ArrowRight,
+  Bug,
+  Check,
+  Clock3,
+  DoorClosed,
+  Hammer,
+  Home as HomeIcon,
+  KeyRound,
+  Refrigerator,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  UsersRound,
+  Wind,
+  Wrench,
+  Zap,
+} from 'lucide-react';
 import { Link } from 'wouter';
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { PublicNav } from '@/components/source-ui';
+
+const TRADES: Array<{ label: string; icon: ComponentType<{ size?: number; className?: string }> }> = [
+  { label: 'Plumbing', icon: Wrench },
+  { label: 'Electrical', icon: Zap },
+  { label: 'Heating & Cooling', icon: Wind },
+  { label: 'Locksmith', icon: KeyRound },
+  { label: 'Roofing', icon: HomeIcon },
+  { label: 'Appliance Repair', icon: Refrigerator },
+  { label: 'Pest Control', icon: Bug },
+  { label: 'Garage Door', icon: DoorClosed },
+  { label: 'Handyman', icon: Hammer },
+  { label: 'Rubbish Removal', icon: Trash2 },
+];
 
 export default function Home() {
   return (
@@ -18,7 +48,11 @@ export default function Home() {
                 <Link href="/request" className="btn-accent" data-testid="link-home-request">Find my tradie <ArrowRight size={17} /></Link>
                 <Link href="/partner" className="btn-quiet border border-[hsl(var(--border))]" data-testid="link-home-partner">I’m a tradie</Link>
               </div>
-              <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3 font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))] md:mt-5"><span className="flex items-center gap-2"><MapPin size={14} /> Melbourne pilot</span><span className="flex items-center gap-2"><UsersRound size={14} /> No endless calls. No directories. No chasing.</span></div>
+              <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-4 md:mt-7">
+                <span className="flex items-baseline gap-2"><span className="text-2xl font-bold tracking-[-.03em] text-[hsl(var(--accent))]">375+</span><span className="font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">Local trade providers</span></span>
+                <span className="flex items-baseline gap-2"><span className="text-2xl font-bold tracking-[-.03em] text-[hsl(var(--accent))]">10+</span><span className="font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">Trades covered</span></span>
+                <span className="flex items-baseline gap-2"><span className="text-2xl font-bold tracking-[-.03em] text-[hsl(var(--accent))]">1</span><span className="font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">Request. Zero chasing.</span></span>
+              </div>
             </div>
             <div className="relative animate-rise [animation-delay:120ms]">
               <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-[hsl(var(--accent)/.18)] blur-3xl" />
@@ -30,6 +64,22 @@ export default function Home() {
               <div className="absolute -bottom-7 -left-8 hidden w-44 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 shadow-[var(--shadow)] md:block"><div className="flex items-center gap-2 text-[hsl(var(--secondary))]"><ShieldCheck size={16} /><span className="font-mono-ui text-[9px] uppercase tracking-[.12em]">Safety first</span></div><p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Clear steps before anyone comes to your door.</p></div>
             </div>
           </div>
+        </section>
+        <section className="content-wrap py-16 md:py-20">
+          <p className="font-mono-ui text-[10px] uppercase tracking-[.16em] text-[hsl(var(--accent))]">Trades we cover</p>
+          <h2 className="mt-4 max-w-xl text-4xl font-bold leading-[.98] tracking-[-.065em] md:text-5xl">One request. Any trade.</h2>
+          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+            {TRADES.map((trade) => (
+              <div
+                key={trade.label}
+                className="group rounded-2xl bg-[hsl(var(--accent)/.08)] p-5 transition-colors hover:bg-[hsl(var(--accent)/.14)]"
+              >
+                <trade.icon size={22} className="text-[hsl(var(--accent))]" />
+                <p className="mt-4 text-sm font-semibold leading-tight">{trade.label}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-6 text-sm text-[hsl(var(--muted-foreground))]">Not sure which one? Tell us the problem in plain words — we’ll work out the trade.</p>
         </section>
         <section className="content-wrap py-20 md:py-20">
           <div className="grid gap-10 md:grid-cols-[.7fr_1.3fr]"><div><p className="font-mono-ui text-[10px] uppercase tracking-[.16em] text-[hsl(var(--secondary))]">We do the chasing</p><h2 className="mt-4 max-w-sm text-4xl font-bold leading-[.98] tracking-[-.065em] md:text-5xl">Tell us once. We’ll take it from there.</h2></div><div className="grid gap-4 sm:grid-cols-3"><Process index="01" title="Describe the problem" detail="Use plain words. You do not need to know which trade you need." /><Process index="02" title="We source locally" detail="We assess the request and approach one suitable provider at a time." /><Process index="03" title="You stay in control" detail="Review the useful details we obtain. Nothing proceeds until you approve the next step." /></div></div>
