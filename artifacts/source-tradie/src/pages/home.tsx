@@ -51,7 +51,6 @@ export default function Home() {
               <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-4 md:mt-7">
                 <span className="flex items-baseline gap-2"><span className="text-2xl font-bold tracking-[-.03em] text-[hsl(var(--accent))]">375+</span><span className="font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">Local trade providers</span></span>
                 <span className="flex items-baseline gap-2"><span className="text-2xl font-bold tracking-[-.03em] text-[hsl(var(--accent))]">10+</span><span className="font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">Trades covered</span></span>
-                <span className="flex items-baseline gap-2"><span className="text-2xl font-bold tracking-[-.03em] text-[hsl(var(--accent))]">1</span><span className="font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">Request. Zero chasing.</span></span>
               </div>
             </div>
             <div className="relative animate-rise [animation-delay:120ms]">

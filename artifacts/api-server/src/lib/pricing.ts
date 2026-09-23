@@ -88,7 +88,7 @@ export const MELBOURNE_PRICING_RULES = {
     maxCents: 18_000,
     customerLabel: "Expected price to fix what you've shown us",
     scope:
-      "We'll attend during standard hours and resolve the hot-water issue exactly as described and shown in your photos, where it's a straightforward fix within this price. If it needs replacement parts, a system replacement, gas or electrical rectification, further investigation, or turns out bigger than what you showed us, we'll always send you a clear separate price to approve or decline before doing anything further -- never extra work without your OK.",
+      "We'll attend during standard hours and resolve the hot-water issue exactly as described and shown in your photos, within this price. If it needs replacement parts, a system replacement, gas or electrical rectification, further investigation, or turns out bigger than what you showed us, we'll always send you a clear separate price to approve or decline before doing anything further -- never extra work without your OK.",
   },
   electricalPowerPoint: {
     code: "electrical.power_point",
@@ -136,7 +136,7 @@ export const MELBOURNE_PRICING_RULES = {
     maxCents: 26_000,
     customerLabel: "Expected price to fix what you've shown us",
     scope:
-      "We'll attend during standard hours, run a safety assessment, and resolve the electrical fault exactly as described and shown in your photos, where it's a straightforward fix within this price. If it needs replacement components, switchboard upgrades, rewiring, further investigation, or turns out bigger than what you showed us, we'll always send you a clear separate price to approve or decline before doing anything further -- never extra work without your OK.",
+      "We'll attend during standard hours, run a safety assessment, and resolve the electrical fault exactly as described and shown in your photos, within this price. If it needs replacement components, switchboard upgrades, rewiring, further investigation, or turns out bigger than what you showed us, we'll always send you a clear separate price to approve or decline before doing anything further -- never extra work without your OK.",
   },
   heatingCoolingSplitSystemDiagnostic: {
     code: "heating_cooling.split_system_diagnostic",
@@ -148,7 +148,7 @@ export const MELBOURNE_PRICING_RULES = {
     maxCents: 28_000,
     customerLabel: "Expected price to fix what you've shown us",
     scope:
-      "We'll attend during standard hours and resolve the split-system issue exactly as described and shown in your photos, where it's a straightforward fix within this price. If it needs cleaning or servicing, replacement parts, refrigerant handling or recharge (requires an ARC-licensed technician), leak testing, or turns out bigger than what you showed us, we'll always send you a clear separate price to approve or decline before doing anything further -- never extra work without your OK.",
+      "We'll attend during standard hours and resolve the split-system issue exactly as described and shown in your photos, within this price. If it needs cleaning or servicing, replacement parts, refrigerant handling or recharge (requires an ARC-licensed technician), leak testing, or turns out bigger than what you showed us, we'll always send you a clear separate price to approve or decline before doing anything further -- never extra work without your OK.",
   },
   generalDiagnostic: {
     code: "general.diagnostic",
@@ -160,7 +160,7 @@ export const MELBOURNE_PRICING_RULES = {
     maxCents: 16_000,
     customerLabel: "Expected price to fix what you've shown us",
     scope:
-      "We'll attend during standard hours and resolve the issue exactly as described and shown in your photos, where it's a straightforward fix within this price. If it needs parts, work by a licensed plumber, electrician, gas fitter or other licensed tradesperson, destructive investigation, difficult access, covers more than one issue, or turns out bigger than what you showed us, we'll always send you a clear separate price to approve or decline before doing anything further -- never extra work without your OK.",
+      "We'll attend during standard hours and resolve the issue exactly as described and shown in your photos, within this price. If it needs parts, work by a licensed plumber, electrician, gas fitter or other licensed tradesperson, destructive investigation, difficult access, covers more than one issue, or turns out bigger than what you showed us, we'll always send you a clear separate price to approve or decline before doing anything further -- never extra work without your OK.",
   },
 } as const satisfies Record<string, PricingRule>;
 
