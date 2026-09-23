@@ -21,7 +21,6 @@ import { Link, useLocation, useParams, useSearch } from "wouter";
 import {
   getGetJobQueryKey,
   useApproveMatch,
-  useConfirmDispatch,
   useCorrectJobIntake,
   useCreateJob,
   useGetJob,
@@ -48,7 +47,6 @@ import {
   StepIndicator,
 } from "@/components/source-ui";
 import { extractExplicitPreferredTime } from "@/lib/intake-time";
-import { getCustomerLifecyclePresentation } from "@/lib/customer-lifecycle";
 import { trackHomeownerFunnelEvent } from "@/lib/homeowner-funnel";
 import { trackMetaHomeownerRequestSubmitted } from "@/lib/meta-pixel";
 import {
@@ -692,6 +690,48 @@ function formatPrice(cents: number): string {
   }).format(cents / 100);
 }
 
+type PaidLifecyclePresentation = {
+  activeStage: number;
+  title: string;
+  stages: [string, string, string, string];
+};
+
+// One combined 4-step ladder for the whole paid-sourcing journey, driven by
+// paidFlowState -- not job.status, which tracks the older free-dispatch
+// system and doesn't move for jobs going through paid manual sourcing.
+// Showing both separately (as this page used to) reads as two disconnected,
+// half-finished progress trackers on the same page.
+function getPaidLifecyclePresentation(
+  job: PublicJobStatus,
+): PaidLifecyclePresentation {
+  const stages: [string, string, string, string] = [
+    "Details confirmed",
+    "Payment received",
+    "Local sourcing",
+    "Tradie confirmed — approve final cost",
+  ];
+
+  switch (job.paidFlowState) {
+    case "payment_confirmed":
+    case "sourcing":
+      return { activeStage: 2, title: "Finding the right local tradie", stages };
+    case "sourcing_failed":
+    case "refund_pending":
+      return { activeStage: 2, title: "No suitable match found — refunding", stages };
+    case "refunded":
+      return { activeStage: 2, title: "Refunded", stages };
+    case "match_ready":
+      return { activeStage: 3, title: "Price and ETA ready to approve", stages };
+    case "approved":
+      return { activeStage: 4, title: "Tradie confirmed", stages };
+    case "completed":
+      return { activeStage: 4, title: "Job completed", stages };
+    // not_started, serviceable, manual_review, checkout_started, unsupported
+    default:
+      return { activeStage: 1, title: "Awaiting payment", stages };
+  }
+}
+
 function ReviewStep({
   form,
   pricing,
@@ -788,7 +828,6 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
       },
     },
   );
-  const confirmDispatch = useConfirmDispatch();
   const runServiceabilityCheck = useRunServiceabilityCheck();
   const serviceabilityTriggered = useRef(false);
 
@@ -850,7 +889,7 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
     );
   }
 
-  const lifecycle = getCustomerLifecyclePresentation(job.status);
+  const lifecycle = getPaidLifecyclePresentation(job);
   const paymentPending = ["not_started", "serviceable", "manual_review"].includes(
     job.paidFlowState,
   );
@@ -932,45 +971,12 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
           </div>
 
           <div className="mt-8 rounded-xl bg-[hsl(var(--primary-foreground)/.08)] p-4 text-sm leading-6 text-[hsl(var(--primary-foreground)/.68)]">
-            {job.acceptedTradie
-              ? `${job.acceptedTradie.businessName} (${job.acceptedTradie.contactName}) confirmed a ${job.acceptedTradie.confirmedPriceKind} price of ${job.acceptedTradie.confirmedPriceCents ? formatPrice(job.acceptedTradie.confirmedPriceCents) : "—"}.${job.acceptedTradie.eta ? ` ETA/status: ${job.acceptedTradie.eta}.` : ""}`
+            {job.paidMatch
+              ? `${job.paidMatch.providerName} confirmed a price of ${formatPrice(job.paidMatch.priceMinCents)}–${formatPrice(job.paidMatch.priceMaxCents)}.${job.paidMatch.eta ? ` ETA: ${job.paidMatch.eta}.` : ""}`
               : "We’re reviewing the job and approaching a suitable local provider. If we cannot find someone appropriate, we’ll tell you clearly rather than inventing a match."}
           </div>
-          {job.status === "awaiting_customer_confirmation" &&
-            job.acceptedTradie && (
-              <div className="mt-5 rounded-xl bg-[hsl(var(--accent))] p-5 text-[hsl(var(--accent-foreground))]">
-                <p className="font-semibold">
-                  Your exact address and contact details are still hidden.
-                </p>
-                <p className="mt-2 text-sm leading-6">
-                  Confirm only if you approve this price and ETA. Anything
-                  outside the described scope requires your approval before work
-                  proceeds.
-                </p>
-                <button
-                  className="btn-main mt-4"
-                  disabled={confirmDispatch.isPending}
-                  onClick={() =>
-                    confirmDispatch.mutate(
-                      { id, params: { token: requestToken } },
-                      {
-                        onSuccess: (updated) => {
-                          queryClient.setQueryData(
-                            getGetJobQueryKey(id, { token: requestToken }),
-                            updated,
-                          );
-                        },
-                      },
-                    )
-                  }
-                  data-testid="button-confirm-dispatch"
-                >
-                  {confirmDispatch.isPending
-                    ? "Confirming"
-                    : "Approve this next step"}
-                </button>
-              </div>
-            )}
+          {/* Approving the match happens below, in the paid-sourcing panel
+              (same paidMatch data) -- not duplicated here. */}
         </div>
 
         {job.expectedPrice && (
@@ -1010,10 +1016,10 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
             className={`mt-4 rounded-2xl border p-5 ${job.assessment.safetyCodes.length ? "border-[hsl(var(--destructive)/.35)] bg-[hsl(var(--destructive)/.06)]" : "border-[hsl(var(--border))] bg-[hsl(var(--card))]"}`}
           >
             <p className="font-mono-ui text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">
-              {lifecycle.assessmentLabel}
+              Safety and request details
             </p>
             <p className="mt-2 text-sm font-semibold">
-              {lifecycle.assessmentMessage}
+              Your request details are confirmed.
             </p>
             {job.assessment.safetyCodes.length > 0 && (
               <p className="mt-2 text-xs text-[hsl(var(--destructive))]">
