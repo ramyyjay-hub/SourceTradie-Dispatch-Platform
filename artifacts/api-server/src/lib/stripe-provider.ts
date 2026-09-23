@@ -81,6 +81,11 @@ export class StripePaymentProvider implements PaymentProvider {
         {
           ui_mode: "embedded",
           mode: "payment",
+          // Lets a Stripe coupon/promotion code (created directly in the
+          // Stripe Dashboard -- Product catalog > Coupons) be entered at
+          // checkout. No custom discount-code system in our own DB; Stripe
+          // is the source of truth for what codes exist and their terms.
+          allow_promotion_codes: true,
           line_items: [
             {
               price_data: {
