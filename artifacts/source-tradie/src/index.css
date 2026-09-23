@@ -124,9 +124,8 @@
   to { opacity: 1; filter: blur(0); letter-spacing: 0; transform: translateY(0); }
 }
 
-.hero-tradie { position:relative; display:inline-block; }
-.hero-tradie-ghost { visibility:hidden; }
-.hero-tradie-word { position:absolute; inset:0; animation:hero-tradie-settle 820ms cubic-bezier(.2,.75,.2,1) 120ms both; }
+.hero-tradie { display:inline-block; }
+.hero-tradie-word { display:inline-block; animation:hero-tradie-settle 820ms cubic-bezier(.2,.75,.2,1) 120ms both; }
 
 @media (prefers-reduced-motion: reduce) {
   .hero-tradie-word { animation:none; }
