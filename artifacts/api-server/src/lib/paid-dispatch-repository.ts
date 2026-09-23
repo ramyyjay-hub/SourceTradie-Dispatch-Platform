@@ -248,7 +248,11 @@ export class PaidDispatchRepository {
       idempotencyKey,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
-      customerEmail: job.customerEmail ?? undefined,
+      // customerEmail is optional on job intake and often stored as "" rather
+      // than null/undefined when the customer skips it. Stripe rejects an
+      // empty-string customer_email as an invalid email, which was crashing
+      // checkout for exactly the jobs where this field was left blank.
+      customerEmail: job.customerEmail || undefined,
     });
     if (!result.ok) return result;
 
