@@ -7,6 +7,6 @@
  */
 
 export interface CheckoutSession {
-  checkoutUrl: string;
+  clientSecret: string;
   testMode: boolean;
 }

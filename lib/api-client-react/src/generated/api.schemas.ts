@@ -605,13 +605,11 @@ export interface ServiceabilityCheckResult {
 
 export interface CheckoutInput {
   /** @minLength 1 */
-  successUrl: string;
-  /** @minLength 1 */
-  cancelUrl: string;
+  returnUrl: string;
 }
 
 export interface CheckoutSession {
-  checkoutUrl: string;
+  clientSecret: string;
   testMode: boolean;
 }
 

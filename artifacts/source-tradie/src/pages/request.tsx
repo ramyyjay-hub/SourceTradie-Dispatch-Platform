@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { loadStripe } from "@stripe/stripe-js";
+import {
+  EmbeddedCheckout,
+  EmbeddedCheckoutProvider,
+} from "@stripe/react-stripe-js";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -30,6 +35,12 @@ import type {
   PublicJobStatus,
 } from "@workspace/api-client-react";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   BackLink,
   Brand,
   SectionLabel,
@@ -48,6 +59,12 @@ import {
   hasUrgentSafetySignal,
   type RequestFlowStep,
 } from "@/lib/request-flow";
+
+// Loaded once at module scope, per Stripe.js's own guidance -- calling
+// loadStripe() on every render/mount would re-fetch and re-initialize it
+// unnecessarily. The publishable key is safe to ship to the client; it's
+// not a secret, unlike STRIPE_SECRET_KEY.
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? "");
 
 const initialForm = {
   description: "",
@@ -1033,15 +1050,17 @@ function PaidSourcingPanel({
   const startCheckout = useStartCheckout();
   const approveMatch = useApproveMatch();
   const [checkoutError, setCheckoutError] = useState("");
+  const [checkoutClientSecret, setCheckoutClientSecret] = useState<
+    string | null
+  >(null);
 
   const handleCheckout = () => {
     setCheckoutError("");
-    const returnUrl = window.location.href;
     startCheckout.mutate(
-      { id, data: { successUrl: returnUrl, cancelUrl: returnUrl } },
+      { id, data: { returnUrl: window.location.href } },
       {
         onSuccess: (session) => {
-          window.location.href = session.checkoutUrl;
+          setCheckoutClientSecret(session.clientSecret);
         },
         onError: () =>
           setCheckoutError(
@@ -1050,6 +1069,33 @@ function PaidSourcingPanel({
       },
     );
   };
+
+  // Mounted alongside whichever panel below is showing -- the customer pays
+  // in a modal on this same page, never redirected off site. Payment is
+  // still only ever confirmed by the Stripe webhook (see paid-dispatch-
+  // repository.ts), never by this modal closing or completing.
+  const checkoutModal = (
+    <Dialog
+      open={Boolean(checkoutClientSecret)}
+      onOpenChange={(open) => {
+        if (!open) setCheckoutClientSecret(null);
+      }}
+    >
+      <DialogContent className="max-w-xl p-0">
+        <DialogHeader className="p-6 pb-0">
+          <DialogTitle>Complete payment</DialogTitle>
+        </DialogHeader>
+        {checkoutClientSecret && (
+          <EmbeddedCheckoutProvider
+            stripe={stripePromise}
+            options={{ clientSecret: checkoutClientSecret }}
+          >
+            <EmbeddedCheckout />
+          </EmbeddedCheckoutProvider>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 
   const handleApprove = () => {
     approveMatch.mutate(
@@ -1098,30 +1144,33 @@ function PaidSourcingPanel({
 
   if (job.paidFlowState === "serviceable" || job.paidFlowState === "manual_review") {
     return (
-      <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
-        <SectionLabel>Sourcing available</SectionLabel>
-        <p className="mt-2 text-2xl font-bold tracking-[-.04em]">
-          $29.99 AUD
-        </p>
-        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-          We'll source a suitable local tradie for this job and bring you a
-          real price and ETA to approve. If we can't find a suitable match,
-          this fee is fully refunded.
-        </p>
-        <button
-          className="btn-accent mt-4"
-          disabled={startCheckout.isPending}
-          onClick={handleCheckout}
-          data-testid="button-start-checkout"
-        >
-          {startCheckout.isPending ? "Starting checkout" : "Get sourcing"}
-        </button>
-        {checkoutError && (
-          <p className="mt-3 text-sm text-[hsl(var(--destructive))]">
-            {checkoutError}
+      <>
+        <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
+          <SectionLabel>Sourcing available</SectionLabel>
+          <p className="mt-2 text-2xl font-bold tracking-[-.04em]">
+            $29.99 AUD
           </p>
-        )}
-      </div>
+          <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+            We'll source a suitable local tradie for this job and bring you a
+            real price and ETA to approve. If we can't find a suitable match,
+            this fee is fully refunded.
+          </p>
+          <button
+            className="btn-accent mt-4"
+            disabled={startCheckout.isPending}
+            onClick={handleCheckout}
+            data-testid="button-start-checkout"
+          >
+            {startCheckout.isPending ? "Starting checkout" : "Get sourcing"}
+          </button>
+          {checkoutError && (
+            <p className="mt-3 text-sm text-[hsl(var(--destructive))]">
+              {checkoutError}
+            </p>
+          )}
+        </div>
+        {checkoutModal}
+      </>
     );
   }
 
@@ -1140,26 +1189,33 @@ function PaidSourcingPanel({
 
   if (job.paidFlowState === "checkout_started") {
     return (
-      <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
-        <SectionLabel>Checkout in progress</SectionLabel>
-        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-          A secure checkout was started. If you didn't finish it or your
-          payment hasn't gone through, you can try again below.
-        </p>
-        <button
-          className="btn-quiet mt-4 border"
-          disabled={startCheckout.isPending}
-          onClick={handleCheckout}
-          data-testid="button-retry-checkout"
-        >
-          {startCheckout.isPending ? "Starting checkout" : "Retry checkout"}
-        </button>
-        {checkoutError && (
-          <p className="mt-3 text-sm text-[hsl(var(--destructive))]">
-            {checkoutError}
+      <>
+        <div className="mt-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5">
+          <SectionLabel>Checkout in progress</SectionLabel>
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[hsl(var(--destructive)/.1)] px-2.5 py-1 text-xs font-semibold text-[hsl(var(--destructive))]">
+            Payment not yet received
           </p>
-        )}
-      </div>
+          <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+            A secure checkout was started. Nothing proceeds until payment is
+            confirmed. If you didn't finish it or your payment hasn't gone
+            through, you can try again below.
+          </p>
+          <button
+            className="btn-quiet mt-4 border"
+            disabled={startCheckout.isPending}
+            onClick={handleCheckout}
+            data-testid="button-retry-checkout"
+          >
+            {startCheckout.isPending ? "Starting checkout" : "Retry checkout"}
+          </button>
+          {checkoutError && (
+            <p className="mt-3 text-sm text-[hsl(var(--destructive))]">
+              {checkoutError}
+            </p>
+          )}
+        </div>
+        {checkoutModal}
+      </>
     );
   }
 
@@ -1170,7 +1226,10 @@ function PaidSourcingPanel({
     return (
       <div className="mt-5 rounded-2xl border border-[hsl(var(--secondary)/.35)] bg-[hsl(var(--secondary)/.08)] p-5">
         <SectionLabel>Paid sourcing</SectionLabel>
-        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[hsl(var(--secondary)/.15)] px-2.5 py-1 text-xs font-semibold text-[hsl(var(--secondary))]">
+          <Check size={12} /> Payment received
+        </p>
+        <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
           Your $29.99 sourcing fee has been received. We're personally
           sourcing a suitable local tradie for this job now — we'll show a
           real price and ETA here as soon as we have one.

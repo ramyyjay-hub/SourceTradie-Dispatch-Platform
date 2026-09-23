@@ -1,10 +1,11 @@
 import Stripe from "stripe";
+import { logger } from "./logger";
 
 export const SOURCING_FEE_AMOUNT_CENTS = 2999;
 export const SOURCING_FEE_CURRENCY = "aud";
 
 export type CreateCheckoutResult =
-  | { ok: true; checkoutUrl: string; sessionId: string; testMode: boolean }
+  | { ok: true; clientSecret: string; sessionId: string; testMode: boolean }
   | { ok: false; errorCode: string };
 
 export type RefundResult =
@@ -18,8 +19,7 @@ export interface PaymentProvider {
     jobId: number;
     reference: string;
     idempotencyKey: string;
-    successUrl: string;
-    cancelUrl: string;
+    returnUrl: string;
     customerEmail?: string;
   }): Promise<CreateCheckoutResult>;
   constructWebhookEvent(
@@ -70,8 +70,7 @@ export class StripePaymentProvider implements PaymentProvider {
     jobId: number;
     reference: string;
     idempotencyKey: string;
-    successUrl: string;
-    cancelUrl: string;
+    returnUrl: string;
     customerEmail?: string;
   }): Promise<CreateCheckoutResult> {
     if (!this.client) {
@@ -80,6 +79,7 @@ export class StripePaymentProvider implements PaymentProvider {
     try {
       const session = await this.client.checkout.sessions.create(
         {
+          ui_mode: "embedded",
           mode: "payment",
           line_items: [
             {
@@ -95,8 +95,7 @@ export class StripePaymentProvider implements PaymentProvider {
               quantity: 1,
             },
           ],
-          success_url: input.successUrl,
-          cancel_url: input.cancelUrl,
+          return_url: input.returnUrl,
           customer_email: input.customerEmail,
           metadata: {
             jobId: String(input.jobId),
@@ -111,16 +110,21 @@ export class StripePaymentProvider implements PaymentProvider {
         },
         { idempotencyKey: input.idempotencyKey },
       );
-      if (!session.url) {
-        return { ok: false, errorCode: "stripe_no_checkout_url" };
+      if (!session.client_secret) {
+        return { ok: false, errorCode: "stripe_no_client_secret" };
       }
       return {
         ok: true,
-        checkoutUrl: session.url,
+        clientSecret: session.client_secret,
         sessionId: session.id,
         testMode: this.testMode,
       };
-    } catch {
+    } catch (err) {
+      // Swallowing the real Stripe error made a real production failure
+      // (empty-string customer_email rejected by Stripe) take a manual
+      // curl-based investigation to diagnose. Logging it costs nothing and
+      // saves that next time.
+      logger.error({ err }, "stripe checkout session creation failed");
       return { ok: false, errorCode: "stripe_checkout_failed" };
     }
   }
@@ -157,7 +161,8 @@ export class StripePaymentProvider implements PaymentProvider {
         { idempotencyKey },
       );
       return { ok: true, refundId: refund.id };
-    } catch {
+    } catch (err) {
+      logger.error({ err }, "stripe refund failed");
       return { ok: false, errorCode: "stripe_refund_failed" };
     }
   }

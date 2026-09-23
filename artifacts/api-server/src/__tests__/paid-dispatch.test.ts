@@ -78,7 +78,7 @@ class MockPaymentProvider implements PaymentProvider {
     });
     return {
       ok: true,
-      checkoutUrl: `https://checkout.stripe.com/test/${sessionId}`,
+      clientSecret: `cs_test_mock_secret_${this.sessionCounter}`,
       sessionId,
       testMode: true,
     };
@@ -196,13 +196,12 @@ describe("paid dispatch: synthetic success path", () => {
 
     const checkout = await repository.startCheckout({
       jobId: job.id,
-      successUrl: "https://sourcetradie.com.au/request/1?paid=1",
-      cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
+      returnUrl: "https://sourcetradie.com.au/request/1?paid=1",
     });
     expect(checkout.ok).toBe(true);
     if (!checkout.ok) return;
     expect(checkout.testMode).toBe(true);
-    expect(checkout.checkoutUrl).toContain("checkout.stripe.com/test/");
+    expect(checkout.clientSecret).toBeTruthy();
 
     const [payment] = await testDb
       .select()
@@ -293,8 +292,7 @@ describe("paid dispatch: synthetic success path", () => {
 
     const first = await repository.startCheckout({
       jobId: job.id,
-      successUrl: "https://sourcetradie.com.au/request/1?paid=1",
-      cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
+      returnUrl: "https://sourcetradie.com.au/request/1?paid=1",
     });
     expect(first.ok).toBe(true);
 
@@ -302,8 +300,7 @@ describe("paid dispatch: synthetic success path", () => {
     // -- same job, same day, so startCheckout reuses the same idempotencyKey.
     const second = await repository.startCheckout({
       jobId: job.id,
-      successUrl: "https://sourcetradie.com.au/request/1?paid=1",
-      cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
+      returnUrl: "https://sourcetradie.com.au/request/1?paid=1",
     });
     expect(second.ok).toBe(true);
 
@@ -326,8 +323,7 @@ describe("paid dispatch: synthetic success path", () => {
 
     const checkout = await repository.startCheckout({
       jobId: job.id,
-      successUrl: "https://sourcetradie.com.au/request/1?paid=1",
-      cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
+      returnUrl: "https://sourcetradie.com.au/request/1?paid=1",
     });
     expect(checkout.ok).toBe(true);
     expect(paymentProvider.createdSessions[0]?.customerEmail).toBeUndefined();
@@ -342,8 +338,7 @@ describe("paid dispatch: synthetic failure / refund path", () => {
     await repository.runServiceabilityCheck(job.id);
     const checkout = await repository.startCheckout({
       jobId: job.id,
-      successUrl: "https://sourcetradie.com.au/request/1?paid=1",
-      cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
+      returnUrl: "https://sourcetradie.com.au/request/1?paid=1",
     });
     expect(checkout.ok).toBe(true);
     if (!checkout.ok) return;
@@ -399,8 +394,7 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
 
     const checkout = await repository.startCheckout({
       jobId: job.id,
-      successUrl: "https://sourcetradie.com.au/request/1?paid=1",
-      cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
+      returnUrl: "https://sourcetradie.com.au/request/1?paid=1",
     });
     expect(checkout.ok).toBe(false);
     if (!checkout.ok) expect(checkout.errorCode).toContain("not_serviceable");
@@ -442,8 +436,7 @@ describe("paid dispatch: serviceability gate refuses to charge", () => {
     // tradie. No candidate's verification_status changes as a result.
     const checkout = await repository.startCheckout({
       jobId: job.id,
-      successUrl: "https://sourcetradie.com.au/request/1?paid=1",
-      cancelUrl: "https://sourcetradie.com.au/request/1?paid=0",
+      returnUrl: "https://sourcetradie.com.au/request/1?paid=1",
     });
     expect(checkout.ok).toBe(true);
     if (checkout.ok) {

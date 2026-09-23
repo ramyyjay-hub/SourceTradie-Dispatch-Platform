@@ -49,8 +49,7 @@ const JobIdParams = z.object({
 });
 
 const StartCheckoutBody = z.object({
-  successUrl: z.string().url(),
-  cancelUrl: z.string().url(),
+  returnUrl: z.string().url(),
 });
 
 const ApproveMatchBody = z.object({
@@ -984,15 +983,14 @@ export function createSourceTradieRouter(
       }
       const result = await paidDispatchRepository.startCheckout({
         jobId: idParsed.data.id,
-        successUrl: bodyParsed.data.successUrl,
-        cancelUrl: bodyParsed.data.cancelUrl,
+        returnUrl: bodyParsed.data.returnUrl,
       });
       if (!result.ok) {
         const status = result.errorCode === "job_not_found" ? 404 : 409;
         return res.status(status).json({ error: result.errorCode });
       }
       return res.json({
-        checkoutUrl: result.checkoutUrl,
+        clientSecret: result.clientSecret,
         testMode: result.testMode,
       });
     },
