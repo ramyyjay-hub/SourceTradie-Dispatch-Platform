@@ -1,4 +1,4 @@
-import { ArrowUpRight, BriefcaseBusiness, ChevronRight, CircleHelp, House, ShieldCheck, Wrench } from 'lucide-react';
+import { ArrowUpRight, BriefcaseBusiness, ChevronRight, CircleHelp, House, Lock, RotateCcw, ShieldCheck, Undo2, Wrench } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import type { ReactNode } from 'react';
 
@@ -126,4 +126,49 @@ export function StatCard({ label, value, accent = false, detail }: { label: stri
 
 export function BackLink({ href, children }: { href: string; children: ReactNode }) {
   return <Link href={href} className="inline-flex items-center gap-1 text-sm font-semibold text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--primary))]" data-testid="link-back"><ChevronRight size={15} className="rotate-180" />{children}</Link>;
+}
+
+
+const ACCEPTED_CARDS = ['Visa', 'Mastercard', 'American Express', 'Apple Pay', 'Google Pay'];
+
+export function AcceptedPayments({ className = '' }: { className?: string }) {
+  return (
+    <div className={className}>
+      <div className="flex flex-wrap items-center gap-1.5" aria-label="Accepted payment methods">
+        {ACCEPTED_CARDS.map((card) => (
+          <span key={card} className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-2 py-1 text-[11px] font-semibold text-[hsl(var(--foreground))]">
+            {card}
+          </span>
+        ))}
+      </div>
+      <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-[hsl(var(--muted-foreground))]">
+        <Lock size={12} className="shrink-0" />
+        Payments are processed securely by Stripe. SourceTradie never sees or stores your card details.
+      </p>
+    </div>
+  );
+}
+
+export function PaymentAssurances({ className = '' }: { className?: string }) {
+  const items = [
+    { icon: Undo2, title: 'Full refund if we can\u2019t match you', body: 'If we can\u2019t find a suitable tradie for your job, the $29.99 sourcing fee is refunded in full.' },
+    { icon: RotateCcw, title: 'Not fixed? We send them back', body: 'If the tradie doesn\u2019t fully fix the problem shown in your request, we\u2019ll send a tradie back at no extra cost.' },
+    { icon: ShieldCheck, title: 'You approve every price', body: 'Nothing proceeds without your OK, and your exact address stays private until you approve the tradie\u2019s price and ETA.' },
+  ];
+  return (
+    <div className={className}>
+      <ul className="space-y-3">
+        {items.map(({ icon: Icon, title, body }) => (
+          <li key={title} className="flex gap-3">
+            <Icon size={18} className="mt-0.5 shrink-0 text-[hsl(var(--secondary))]" />
+            <div>
+              <p className="text-sm font-semibold">{title}</p>
+              <p className="text-xs leading-5 text-[hsl(var(--muted-foreground))]">{body}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <AcceptedPayments className="mt-4" />
+    </div>
+  );
 }

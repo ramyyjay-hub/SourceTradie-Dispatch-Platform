@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'wouter';
 import type { ComponentType, ReactNode } from 'react';
-import { PublicNav } from '@/components/source-ui';
+import { AcceptedPayments, PublicNav } from '@/components/source-ui';
 
 const TRADES: Array<{ label: string; icon: ComponentType<{ size?: number; className?: string }> }> = [
   { label: 'Plumbing', icon: Wrench },
@@ -103,7 +103,7 @@ export default function Home() {
         </section>
         <section className="content-wrap flex flex-col items-start justify-between gap-8 py-20 md:flex-row md:items-end md:py-24"><div><p className="font-mono-ui text-[10px] uppercase tracking-[.16em] text-[hsl(var(--secondary))]">If we cannot find a suitable provider</p><h2 className="mt-3 text-4xl font-bold tracking-[-.06em] md:text-6xl">We’ll tell you clearly.<br /><span className="font-display font-normal italic">No invented match.</span></h2><p className="mt-4 max-w-xl text-sm leading-6 text-[hsl(var(--muted-foreground))]">Availability and prices are never guaranteed. You stay in control and nothing proceeds until you approve the next step.</p></div><Link href="/request" className="btn-main" data-testid="link-final-request">Find my tradie <ArrowRight size={17} /></Link></section>
       </main>
-      <footer className="border-t border-[hsl(var(--border))] py-6"><div className="content-wrap flex flex-col gap-3 text-xs text-[hsl(var(--muted-foreground))] sm:flex-row sm:items-center sm:justify-between"><span>SourceTradie — Melbourne’s managed tradie sourcing service.</span><nav className="flex gap-4"><Link href="/find-a-tradie" className="hover:underline">Home services</Link><Link href="/for-tradies" className="hover:underline" data-testid="link-footer-for-tradies">For tradies</Link><Link href="/privacy" className="hover:underline">Privacy</Link><Link href="/terms" className="hover:underline">Terms</Link></nav></div></footer>
+      <footer className="border-t border-[hsl(var(--border))] py-8"><div className="content-wrap"><div className="grid gap-6 text-xs text-[hsl(var(--muted-foreground))] md:grid-cols-2"><div><p className="text-sm font-semibold text-[hsl(var(--foreground))]">Pay with confidence</p><ul className="mt-2 space-y-1.5 leading-5"><li>Full refund of the $29.99 sourcing fee if we can’t match you with a tradie.</li><li>Not fully fixed? We send a tradie back at no extra cost.</li><li>You approve every price before any work starts — no surprise charges.</li><li>Your exact address stays private until you approve the tradie’s price and ETA.</li></ul></div><div><p className="text-sm font-semibold text-[hsl(var(--foreground))]">Secure payments</p><AcceptedPayments className="mt-2" /></div></div><div className="mt-6 flex flex-col gap-3 border-t border-[hsl(var(--border))] pt-4 text-xs text-[hsl(var(--muted-foreground))] sm:flex-row sm:items-center sm:justify-between"><span>SourceTradie — Melbourne’s managed tradie sourcing service.</span><nav className="flex flex-wrap gap-4"><Link href="/find-a-tradie" className="hover:underline">Home services</Link><Link href="/for-tradies" className="hover:underline" data-testid="link-footer-for-tradies">For tradies</Link><Link href="/privacy" className="hover:underline">Privacy</Link><Link href="/terms" className="hover:underline">Terms</Link></nav></div></div></footer>
     </div>
   );
 }
