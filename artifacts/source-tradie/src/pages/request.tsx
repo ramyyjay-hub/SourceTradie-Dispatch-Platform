@@ -48,7 +48,10 @@ import {
 } from "@/components/source-ui";
 import { extractExplicitPreferredTime } from "@/lib/intake-time";
 import { trackHomeownerFunnelEvent } from "@/lib/homeowner-funnel";
-import { trackMetaHomeownerRequestSubmitted } from "@/lib/meta-pixel";
+import {
+  trackMetaHomeownerRequestSubmitted,
+  trackMetaSourcingPurchase,
+} from "@/lib/meta-pixel";
 import {
   getNextRequestFlowStep,
   getPreviousRequestFlowStep,
@@ -820,6 +823,10 @@ function RequestStatus({ id, token }: { id: number; token?: string }) {
       query: {
         enabled: Boolean(id && requestToken.length >= 16),
         queryKey: getGetJobQueryKey(id, { token: requestToken }),
+        // Payment is confirmed by a Stripe webhook that can land a few
+        // seconds after the customer returns from checkout.
+        refetchInterval: (query) =>
+          query.state.data?.paidFlowState === "checkout_started" ? 3000 : false,
       },
     },
   );
@@ -1055,12 +1062,38 @@ function PaidSourcingPanel({
     string | null
   >(null);
 
+  const paymentConfirmed = [
+    "payment_confirmed",
+    "sourcing",
+    "match_ready",
+    "approved",
+    "completed",
+  ].includes(job.paidFlowState);
+  useEffect(() => {
+    if (!paymentConfirmed) return;
+    try {
+      const started = localStorage.getItem(`st_checkout_started_${id}`);
+      const tracked = localStorage.getItem(`st_purchase_tracked_${id}`);
+      if (started && !tracked) {
+        trackMetaSourcingPurchase(id, 29.99);
+        localStorage.setItem(`st_purchase_tracked_${id}`, "1");
+      }
+    } catch {
+      // storage unavailable: skip tracking
+    }
+  }, [paymentConfirmed, id]);
+
   const handleCheckout = () => {
     setCheckoutError("");
     startCheckout.mutate(
       { id, data: { returnUrl: window.location.href } },
       {
         onSuccess: (session) => {
+          try {
+            localStorage.setItem(`st_checkout_started_${id}`, "1");
+          } catch {
+            // storage unavailable: purchase tracking is skipped, nothing else breaks
+          }
           setCheckoutClientSecret(session.clientSecret);
         },
         onError: () =>
