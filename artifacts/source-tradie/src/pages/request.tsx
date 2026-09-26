@@ -45,6 +45,7 @@ import {
   SectionLabel,
   Skeleton,
   StepIndicator,
+  PaymentAssurances,
 } from "@/components/source-ui";
 import { extractExplicitPreferredTime } from "@/lib/intake-time";
 import { trackHomeownerFunnelEvent } from "@/lib/homeowner-funnel";
@@ -1090,6 +1091,9 @@ function PaidSourcingPanel({
       <DialogContent className="max-w-xl p-0">
         <DialogHeader className="p-6 pb-0">
           <DialogTitle>Complete payment</DialogTitle>
+          <p className="pt-1 text-xs text-[hsl(var(--muted-foreground))]">
+            Fully refunded if we can't match you with a tradie. Not fixed? We send a tradie back at no extra cost.
+          </p>
         </DialogHeader>
         {checkoutClientSecret && (
           <EmbeddedCheckoutProvider
@@ -1174,6 +1178,7 @@ function PaidSourcingPanel({
               {checkoutError}
             </p>
           )}
+          <PaymentAssurances className="mt-5 border-t border-[hsl(var(--secondary)/.25)] pt-4" />
         </div>
         {checkoutModal}
       </>
@@ -1219,6 +1224,7 @@ function PaidSourcingPanel({
               {checkoutError}
             </p>
           )}
+          <PaymentAssurances className="mt-5 border-t border-[hsl(var(--border))] pt-4" />
         </div>
         {checkoutModal}
       </>
