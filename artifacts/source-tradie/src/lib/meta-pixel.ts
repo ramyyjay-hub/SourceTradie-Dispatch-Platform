@@ -80,3 +80,18 @@ export function trackMetaHomeownerRequestSubmitted(jobId: number | string) {
     job_id: jobId,
   });
 }
+
+/**
+ * Fires a Purchase for the sourcing fee. Only call once the API reports the
+ * payment as confirmed (Stripe webhook processed). `eventID` lets Meta
+ * de-duplicate if it is ever sent from the server as well.
+ */
+export function trackMetaSourcingPurchase(jobId: number | string, amountAud: number) {
+  if (typeof window === "undefined" || !window.fbq) return;
+  window.fbq(
+    "track",
+    "Purchase",
+    { value: amountAud, currency: "AUD", content_name: "sourcing_fee", job_id: jobId },
+    { eventID: `sourcing-fee-${jobId}` },
+  );
+}
