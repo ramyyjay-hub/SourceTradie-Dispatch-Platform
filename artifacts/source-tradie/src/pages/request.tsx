@@ -15,7 +15,6 @@ import {
   LoaderCircle,
   MapPin,
   Phone,
-  ShieldCheck,
 } from "lucide-react";
 import { Link, useLocation, useParams, useSearch } from "wouter";
 import {
@@ -799,14 +798,9 @@ function ReviewStep({
         </div>
       )}
 
-      <div className="flex gap-3 rounded-xl bg-[hsl(var(--secondary)/.1)] p-4 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-        <ShieldCheck
-          size={18}
-          className="mt-1 shrink-0 text-[hsl(var(--secondary))]"
-        />
-        SourceTradie will assess the request and source a suitable local provider.
-        You stay in control: nothing proceeds, and your exact address is not
-        shared, until you approve the next step.
+      <div className="rounded-xl bg-[hsl(var(--secondary)/.1)] p-4">
+        <p className="mb-3 text-sm font-semibold">Pay with confidence</p>
+        <PaymentAssurances />
       </div>
     </div>
   );
@@ -1165,8 +1159,9 @@ function PaidSourcingPanel({
             real price and ETA to approve. If we can't find a suitable match,
             this fee is fully refunded.
           </p>
+          <PaymentAssurances className="mt-4" />
           <button
-            className="btn-accent mt-4"
+            className="btn-accent mt-5"
             disabled={startCheckout.isPending}
             onClick={handleCheckout}
             data-testid="button-start-checkout"
@@ -1178,7 +1173,6 @@ function PaidSourcingPanel({
               {checkoutError}
             </p>
           )}
-          <PaymentAssurances className="mt-5 border-t border-[hsl(var(--secondary)/.25)] pt-4" />
         </div>
         {checkoutModal}
       </>
@@ -1211,8 +1205,9 @@ function PaidSourcingPanel({
             confirmed. If you didn't finish it or your payment hasn't gone
             through, you can try again below.
           </p>
+          <PaymentAssurances className="mt-4" />
           <button
-            className="btn-quiet mt-4 border"
+            className="btn-quiet mt-5 border"
             disabled={startCheckout.isPending}
             onClick={handleCheckout}
             data-testid="button-retry-checkout"
@@ -1224,7 +1219,6 @@ function PaidSourcingPanel({
               {checkoutError}
             </p>
           )}
-          <PaymentAssurances className="mt-5 border-t border-[hsl(var(--border))] pt-4" />
         </div>
         {checkoutModal}
       </>
