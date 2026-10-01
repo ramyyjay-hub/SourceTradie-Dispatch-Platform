@@ -1104,6 +1104,20 @@ function PaidSourcingPanel({
     );
   };
 
+  // Payment must be the very next thing the customer sees once their job is
+  // payable -- never a skippable secondary click on a free-looking status
+  // page. Fires once per job as soon as paidFlowState allows checkout;
+  // guarded by a ref (not state) so a later re-render after this job moves
+  // past serviceable/manual_review never re-opens it.
+  const autoCheckoutTriggered = useRef(false);
+  useEffect(() => {
+    if (autoCheckoutTriggered.current) return;
+    if (job.paidFlowState !== "serviceable" && job.paidFlowState !== "manual_review") return;
+    autoCheckoutTriggered.current = true;
+    handleCheckout();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.paidFlowState]);
+
   // Mounted alongside whichever panel below is showing -- the customer pays
   // in a modal on this same page, never redirected off site. Payment is
   // still only ever confirmed by the Stripe webhook (see paid-dispatch-

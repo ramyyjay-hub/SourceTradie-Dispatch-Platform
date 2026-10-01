@@ -149,7 +149,7 @@ const successfulProvider: JobAiProvider = {
 };
 
 describe("source tradie repository", () => {
-  it("alerts operations immediately and holds hazardous requests for review", async () => {
+  it("holds hazardous requests for review without alerting operations before payment", async () => {
     const emails: EmailMessage[] = [];
     const { repository, db, client } = await buildRepository(undefined, {
       sendEmail: async (message) => {
@@ -167,15 +167,15 @@ describe("source tradie repository", () => {
       customerName: "Synthetic Customer",
     });
     expect(job.status).toBe("reviewing");
-    expect(emails).toHaveLength(1);
-    expect(emails[0]?.subject).toContain("[SAFETY REVIEW]");
-    expect(emails[0]?.text).toContain("Urgency: ASAP");
+    // No admin alert fires at creation, hazardous or not -- the owner only
+    // wants to be notified once a job is actually paid (see
+    // PaidDispatchRepository.notifyOperator on the Stripe webhook).
+    expect(emails).toHaveLength(0);
     const alertRows = await db
       .select()
       .from(notificationsTable)
       .where(eq(notificationsTable.type, "homeowner_request_received"));
-    expect(alertRows).toHaveLength(1);
-    expect(alertRows[0]?.status).toBe("sent");
+    expect(alertRows).toHaveLength(0);
     await client.close();
   });
 
@@ -736,7 +736,10 @@ describe("source tradie repository", () => {
       confirmedPriceCents: 22_000,
       customerConfirmed: false,
     });
-    expect(sent).toHaveLength(3);
+    // 2, not 3: the owner no longer gets an admin email when a job is
+    // created, only the partner offer email and the customer price-ready
+    // email below -- admin is notified solely once a job is actually paid.
+    expect(sent).toHaveLength(2);
     expect(
       (await repository.confirmDispatch(job.id, "0".repeat(64))).kind,
     ).toBe("not_found");
@@ -766,8 +769,10 @@ describe("source tradie repository", () => {
       23_000,
     );
     expect(duplicate.kind).toBe("invalid_transition");
-    expect(sent).toHaveLength(5);
-    expect(await db.select().from(notificationsTable)).toHaveLength(6);
+    // 4 and 5, not 5 and 6: one fewer email throughout this flow now that
+    // job creation no longer sends an admin alert.
+    expect(sent).toHaveLength(4);
+    expect(await db.select().from(notificationsTable)).toHaveLength(5);
     await client.close();
   });
 
@@ -924,7 +929,9 @@ describe("source tradie repository", () => {
     expect(smsMessages).toHaveLength(1);
     const rows = await db.select().from(notificationsTable);
     expect(rows.filter((row) => row.channel === "sms")).toHaveLength(1);
-    expect(rows.filter((row) => row.channel === "email")).toHaveLength(2);
+    // 1, not 2: no admin email fires on job creation anymore, only the
+    // partner offer email.
+    expect(rows.filter((row) => row.channel === "email")).toHaveLength(1);
     await client.close();
   });
 

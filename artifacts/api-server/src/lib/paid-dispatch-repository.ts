@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type Stripe from "stripe";
-import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lt, ne } from "drizzle-orm";
 import {
   candidateProviderTradesTable,
   candidateProvidersTable,
@@ -530,6 +530,101 @@ export class PaidDispatchRepository {
       .from(jobsTable)
       .where(ne(jobsTable.paidFlowState, "not_started"))
       .orderBy(desc(jobsTable.updatedAt));
+  }
+
+  /**
+   * Nudges a homeowner who created a request but never completed payment.
+   * One reminder per job, sent at least an hour after creation so we never
+   * email someone mid-checkout. Idempotency comes from the unique index on
+   * notificationsTable.idempotencyKey -- re-running this against the same
+   * job is always safe, nothing gets sent twice.
+   */
+  async sendPaymentReminders(): Promise<{ sent: number; skipped: number }> {
+    const cutoff = new Date(Date.now() - 60 * 60 * 1000);
+    const candidates = await this.database
+      .select()
+      .from(jobsTable)
+      .where(
+        and(
+          inArray(jobsTable.paidFlowState, [
+            "not_started",
+            "serviceable",
+            "manual_review",
+            "checkout_started",
+          ]),
+          isNotNull(jobsTable.customerEmail),
+          lt(jobsTable.createdAt, cutoff),
+        ),
+      );
+
+    let sent = 0;
+    let skipped = 0;
+    for (const job of candidates) {
+      if (!job.customerEmail) {
+        skipped += 1;
+        continue;
+      }
+      const idempotencyKey = `job:${job.id}:payment-reminder`;
+      const inserted = await this.database
+        .insert(notificationsTable)
+        .values({
+          jobId: job.id,
+          recipientType: "customer",
+          type: "payment_reminder",
+          channel: "email",
+          status: "pending",
+          idempotencyKey,
+        })
+        .onConflictDoNothing({ target: notificationsTable.idempotencyKey })
+        .returning({ id: notificationsTable.id });
+
+      if (!inserted[0]) {
+        // Already reminded this job once -- skip silently.
+        skipped += 1;
+        continue;
+      }
+
+      const statusUrl = `https://sourcetradie.com.au/request/${job.id}?token=${job.publicStatusToken}`;
+      const firstName = job.customerName.split(" ")[0] || job.customerName;
+      const result = await this.notificationProvider
+        .sendEmail({
+          to: job.customerEmail,
+          subject: `${firstName}, your SourceTradie request is still waiting`,
+          text: [
+            `Hi ${firstName},`,
+            "",
+            `You told us about your job (ref ${job.reference}) but haven't completed the $29.99 sourcing payment yet -- so we haven't started finding you a tradie.`,
+            "",
+            "Here's what that $29.99 covers:",
+            "- We source and coordinate a suitable local tradie for your exact job",
+            "- If we can't find a suitable match, you get a full refund",
+            "- If the tradie doesn't fully fix the problem you described, we send them back at no extra cost",
+            "- Nothing proceeds without your OK on the final price",
+            "",
+            "Pick up right where you left off:",
+            statusUrl,
+            "",
+            "If you've changed your mind or already sorted it another way, no action needed -- we won't chase you about this again.",
+          ].join("\n"),
+        })
+        .catch(() => ({ ok: false as const, errorCode: "send_failed" }));
+
+      await this.database
+        .update(notificationsTable)
+        .set({
+          status: result.ok ? "sent" : "failed",
+          providerMessageId: result.ok ? result.providerMessageId : null,
+          errorCode: result.ok ? null : result.errorCode,
+          sentAt: result.ok ? new Date() : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(notificationsTable.idempotencyKey, idempotencyKey));
+
+      if (result.ok) sent += 1;
+      else skipped += 1;
+    }
+
+    return { sent, skipped };
   }
 }
 

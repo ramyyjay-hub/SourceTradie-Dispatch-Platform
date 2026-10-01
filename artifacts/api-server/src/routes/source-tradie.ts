@@ -1108,6 +1108,23 @@ export function createSourceTradieRouter(
     },
   );
 
+  // Vercel Cron Jobs call this as a plain GET with no user session, so it
+  // can't use authRequired/requireAdmin -- Vercel automatically attaches
+  // `Authorization: Bearer ${CRON_SECRET}` to cron-triggered requests when
+  // an env var literally named CRON_SECRET is set on the project, so that's
+  // what gates this route instead.
+  router.get("/cron/payment-reminders", async (req, res) => {
+    const expected = process.env["CRON_SECRET"];
+    if (!expected) {
+      return res.status(503).json({ error: "cron_secret_not_configured" });
+    }
+    if (req.headers.authorization !== `Bearer ${expected}`) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+    const result = await paidDispatchRepository.sendPaymentReminders();
+    return res.json({ ok: true, ...result });
+  });
+
   return router;
 }
 
