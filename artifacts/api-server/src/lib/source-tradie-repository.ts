@@ -1040,30 +1040,10 @@ export class SourceTradieRepository {
         submissionId: submissionRows[0]!.id,
       };
     });
-    await this.sendNotification({
-      jobId: created.job.id,
-      recipientType: "admin",
-      type: "homeowner_request_received",
-      idempotencyKey: `job:${created.job.id}:operator-alert:email:v1`,
-      to:
-        process.env["PARTNER_OPERATIONS_EMAIL"] ??
-        "partners@sourcetradie.com.au",
-      subject: `${safety.interruptFlow ? "[SAFETY REVIEW] " : ""}New SourceTradie homeowner request · ${created.job.reference} · ${input.urgency}`,
-      text: [
-        "New SourceTradie Homeowner Request",
-        "",
-        `Reference: ${created.job.reference}`,
-        `Urgency: ${input.urgency}`,
-        `Suburb/postcode: ${input.suburb} ${input.postcode}`,
-        `Requested trade: ${input.trade}`,
-        `Safety review required: ${safety.interruptFlow ? "YES" : "No"}`,
-        "",
-        "Review this request promptly in the SourceTradie admin dispatch desk.",
-        "Customer details remain protected and must be used only for fulfilment.",
-        "",
-        "https://sourcetradie.com.au/admin",
-      ].join("\n"),
-    }).catch(() => "failed");
+    // The owner does not want any admin alert for a request until it is
+    // actually paid -- that notification happens separately via
+    // PaidDispatchRepository.notifyOperator on the Stripe webhook. An
+    // unpaid request, safety-flagged or not, stays silent here.
     const assessment = await this.assessSubmission({
       jobId: created.job.id,
       submissionId: created.submissionId,
